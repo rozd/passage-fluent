@@ -10,13 +10,13 @@ import Fluent
 import JWT
 import Crypto
 
-struct DatabaseStore: Authentication.Store {
+struct DatabaseStore: Identity.Store {
 
     let db: any Database
 
-    let users: any Authentication.UserStore
+    let users: any Identity.UserStore
 
-    let tokens: any Authentication.TokenStore
+    let tokens: any Identity.TokenStore
 
     init(app: Application, db: any Database) {
         self.db = db
@@ -30,7 +30,7 @@ struct DatabaseStore: Authentication.Store {
 
 extension DatabaseStore {
 
-    struct UserStore: Authentication.UserStore {
+    struct UserStore: Identity.UserStore {
         let db: any Database
 
         func find(byId id: String) async throws -> (any User)? {
@@ -111,7 +111,7 @@ extension DatabaseStore {
 
 extension DatabaseStore {
 
-    struct TokenStore: Authentication.TokenStore {
+    struct TokenStore: Identity.TokenStore {
 
         let app: Application
         let db: any Database
@@ -136,7 +136,7 @@ extension DatabaseStore {
             replacing tokenToReplace: (any RefreshToken)?,
         ) async throws -> any RefreshToken {
             guard let user = user as? UserModel else {
-                throw AuthenticationError.unexpected(message: "Unexpected user type: \(type(of: user))")
+                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
             }
             return try await db.transaction { db in
                 let newRefreshToken = RefreshTokenModel(
@@ -152,7 +152,7 @@ extension DatabaseStore {
                 }
 
                 guard let oldRefreshToken = tokenToReplace as? RefreshTokenModel else {
-                    throw AuthenticationError.unexpected(message: "Unexpected token type: \(type(of: tokenToReplace))")
+                    throw IdentityError.unexpected(message: "Unexpected token type: \(type(of: tokenToReplace))")
                 }
 
                 oldRefreshToken.revokedAt = .now
@@ -175,11 +175,11 @@ extension DatabaseStore {
 
         func revokeRefreshToken(for user: any User) async throws {
             guard let userId = user.id else {
-                throw AuthenticationError.unexpected(message: "User ID is missing")
+                throw IdentityError.unexpected(message: "User ID is missing")
             }
 
             guard let userUUID = userId as? UUID else {
-                throw AuthenticationError.unexpected(message: "User ID must be UUID")
+                throw IdentityError.unexpected(message: "User ID must be UUID")
             }
 
             try await RefreshTokenModel.query(on: db)
@@ -203,7 +203,7 @@ extension DatabaseStore {
 
         func revoke(refreshTokenFamilyStartingFrom token: any RefreshToken) async throws {
             guard let token = token as? RefreshTokenModel else {
-                throw AuthenticationError.unexpected(message: "Unexpected token type: \(type(of: token))")
+                throw IdentityError.unexpected(message: "Unexpected token type: \(type(of: token))")
             }
 
             try await db.transaction { db in
