@@ -34,7 +34,7 @@ extension DatabaseStore {
                 .first()
 
             guard existing == nil else {
-                throw AuthenticationError.emailAlreadyRegistered
+                throw credential.errorWhenIdentifierAlreadyRegistered
             }
 
             let user = try await db.transaction { db in
