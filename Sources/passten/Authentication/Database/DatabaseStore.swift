@@ -7,6 +7,8 @@
 
 import Vapor
 import Fluent
+import JWT
+import Crypto
 
 struct DatabaseStore: Authentication.Store {
 
@@ -14,11 +16,15 @@ struct DatabaseStore: Authentication.Store {
 
     let users: any Authentication.UserStore
 
+    let tokens: any Authentication.TokenStore
+
     init(app: Application, db: any Database) {
         self.db = db
         self.users = UserStore(db: db)
+        self.tokens = TokenStore(app: app, db: db)
         app.migrations.add(CreateUserModel())
         app.migrations.add(CreateIdentifierModel())
+        app.migrations.add(CreateRefreshTokenModel())
     }
 }
 
@@ -26,6 +32,22 @@ extension DatabaseStore {
 
     struct UserStore: Authentication.UserStore {
         let db: any Database
+
+        func find(byId id: String) async throws -> (any User)? {
+            guard let uuid = UUID(uuidString: id) else {
+                return nil
+            }
+
+            guard let user = try await UserModel.query(on: db)
+                .filter(\.$id == uuid)
+                .with(\.$identifiers)
+                .first()
+            else {
+                return nil
+            }
+
+            return user
+        }
 
         func create(with credential: Credential) async throws {
             let existing = try await IdentifierModel.query(on: db)
@@ -37,7 +59,7 @@ extension DatabaseStore {
                 throw credential.errorWhenIdentifierAlreadyRegistered
             }
 
-            let user = try await db.transaction { db in
+            try await db.transaction { db in
                 let user = UserModel(passwordHash: credential.passwordHash)
                 try await user.save(on: db)
 
@@ -48,8 +70,6 @@ extension DatabaseStore {
                     verified: false
                 )
                 try await identifier.save(on: db)
-
-                return user
             }
         }
 
@@ -61,7 +81,7 @@ extension DatabaseStore {
                 .first()
 
             guard let identifier = existing else {
-                throw credential.errorWhenIdentifierIsNotRegistered
+                throw credential.errorWhenIdentifierIsInvalid
             }
 
             return identifier.user
@@ -77,7 +97,7 @@ extension DatabaseStore {
                 .first()
 
             guard let model = existing else {
-                throw identifier.errorWhenIdentifierIsNotRegistered
+                throw identifier.errorWhenIdentifierIsInvalid
             }
 
             return model.user
@@ -85,5 +105,124 @@ extension DatabaseStore {
 
     }
 
+}
 
+// MARK: - TokenStore
+
+extension DatabaseStore {
+
+    struct TokenStore: Authentication.TokenStore {
+
+        let app: Application
+        let db: any Database
+
+        func createRefreshToken(
+            for user: any User,
+            tokenHash hash: String,
+            expiresAt: Date,
+        ) async throws -> any RefreshToken {
+            return try await self.createRefreshToken(
+                for: user,
+                tokenHash: hash,
+                expiresAt: expiresAt,
+                replacing: nil,
+            )
+        }
+
+        func createRefreshToken(
+            for user: any User,
+            tokenHash hash: String,
+            expiresAt: Date,
+            replacing tokenToReplace: (any RefreshToken)?,
+        ) async throws -> any RefreshToken {
+            guard let user = user as? UserModel else {
+                throw AuthenticationError.unexpected(message: "Unexpected user type: \(type(of: user))")
+            }
+            return try await db.transaction { db in
+                let newRefreshToken = RefreshTokenModel(
+                    tokenHash: hash,
+                    userID: try user.requireID(),
+                    expiresAt: expiresAt
+                )
+
+                try await newRefreshToken.save(on: db)
+
+                guard let tokenToReplace = tokenToReplace else {
+                    return newRefreshToken
+                }
+
+                guard let oldRefreshToken = tokenToReplace as? RefreshTokenModel else {
+                    throw AuthenticationError.unexpected(message: "Unexpected token type: \(type(of: tokenToReplace))")
+                }
+
+                oldRefreshToken.revokedAt = .now
+                oldRefreshToken.replacedBy = newRefreshToken.id
+
+                try await oldRefreshToken.save(on: db)
+
+                return newRefreshToken
+            }
+        }
+
+        func find(refreshTokenHash hash: String) async throws -> (any RefreshToken)? {
+            return try await RefreshTokenModel.query(on: db)
+                .filter(\.$tokenHash == hash)
+                .with(\.$user) { user in
+                    user.with(\.$identifiers)
+                }
+                .first()
+        }
+
+        func revokeRefreshToken(for user: any User) async throws {
+            guard let userId = user.id else {
+                throw AuthenticationError.unexpected(message: "User ID is missing")
+            }
+
+            guard let userUUID = userId as? UUID else {
+                throw AuthenticationError.unexpected(message: "User ID must be UUID")
+            }
+
+            try await RefreshTokenModel.query(on: db)
+                .filter(\.$user.$id == userUUID)
+                .filter(\.$revokedAt == nil)
+                .set(\.$revokedAt, to: .now)
+                .update()
+        }
+
+        func revokeRefreshToken(withHash hash: String) async throws {
+            guard let existingToken = try await RefreshTokenModel.query(on: db)
+                .filter(\.$tokenHash == hash)
+                .first()
+            else {
+                return // Token not found, nothing to revoke
+            }
+
+            existingToken.revokedAt = .now
+            try await existingToken.save(on: db)
+        }
+
+        func revoke(refreshTokenFamilyStartingFrom token: any RefreshToken) async throws {
+            guard let token = token as? RefreshTokenModel else {
+                throw AuthenticationError.unexpected(message: "Unexpected token type: \(type(of: token))")
+            }
+
+            try await db.transaction { db in
+                var currentTokenId = token.id
+
+                while let tokenId = currentTokenId {
+                    guard let nextToken = try await RefreshTokenModel.find(tokenId, on: db) else {
+                        break
+                    }
+
+                    if nextToken.revokedAt == nil {
+                        nextToken.revokedAt = .now
+                        try await nextToken.save(on: db)
+                    }
+
+                    currentTokenId = nextToken.replacedBy
+                }
+            }
+
+        }
+    }
 }
