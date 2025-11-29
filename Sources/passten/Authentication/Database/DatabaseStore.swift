@@ -28,7 +28,8 @@ struct DatabaseStore: Identity.Store {
         app.migrations.add(CreateUserModel())
         app.migrations.add(CreateIdentifierModel())
         app.migrations.add(CreateRefreshTokenModel())
-        // TODO: Add CreateVerificationCodeModel migration when implementing CodeStore
+        app.migrations.add(CreateEmailVerificationCodeModel())
+        app.migrations.add(CreatePhoneVerificationCodeModel())
     }
 }
 
@@ -259,8 +260,6 @@ extension DatabaseStore {
 
 extension DatabaseStore {
 
-    /// Stub implementation of CodeStore for verification codes.
-    /// TODO: Implement with proper database model and migration.
     struct CodeStore: Identity.CodeStore {
 
         let db: any Database
@@ -273,26 +272,48 @@ extension DatabaseStore {
             codeHash: String,
             expiresAt: Date
         ) async throws -> any Identity.Verification.EmailCode {
-            // TODO: Implement with EmailVerificationCodeModel
-            fatalError("CodeStore.createEmailCode not implemented")
+            guard let user = user as? UserModel else {
+                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+            }
+
+            let code = EmailVerificationCodeModel(
+                email: email,
+                codeHash: codeHash,
+                userID: try user.requireID(),
+                expiresAt: expiresAt
+            )
+            try await code.save(on: db)
+            return code
         }
 
         func findEmailCode(
             forEmail email: String,
             codeHash: String
         ) async throws -> (any Identity.Verification.EmailCode)? {
-            // TODO: Implement with EmailVerificationCodeModel
-            fatalError("CodeStore.findEmailCode not implemented")
+            try await EmailVerificationCodeModel.query(on: db)
+                .filter(\.$email == email)
+                .filter(\.$codeHash == codeHash)
+                .filter(\.$invalidatedAt == nil)
+                .with(\.$user) { user in
+                    user.with(\.$identifiers)
+                }
+                .first()
         }
 
         func invalidateEmailCodes(forEmail email: String) async throws {
-            // TODO: Implement with EmailVerificationCodeModel
-            fatalError("CodeStore.invalidateEmailCodes not implemented")
+            try await EmailVerificationCodeModel.query(on: db)
+                .filter(\.$email == email)
+                .filter(\.$invalidatedAt == nil)
+                .set(\.$invalidatedAt, to: .now)
+                .update()
         }
 
         func incrementFailedAttempts(for code: any Identity.Verification.EmailCode) async throws {
-            // TODO: Implement with EmailVerificationCodeModel
-            fatalError("CodeStore.incrementFailedAttempts(EmailCode) not implemented")
+            guard let code = code as? EmailVerificationCodeModel else {
+                throw IdentityError.unexpected(message: "Unexpected code type: \(type(of: code))")
+            }
+            code.failedAttempts += 1
+            try await code.save(on: db)
         }
 
         // MARK: - Phone Codes
@@ -303,26 +324,48 @@ extension DatabaseStore {
             codeHash: String,
             expiresAt: Date
         ) async throws -> any Identity.Verification.PhoneCode {
-            // TODO: Implement with PhoneVerificationCodeModel
-            fatalError("CodeStore.createPhoneCode not implemented")
+            guard let user = user as? UserModel else {
+                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+            }
+
+            let code = PhoneVerificationCodeModel(
+                phone: phone,
+                codeHash: codeHash,
+                userID: try user.requireID(),
+                expiresAt: expiresAt
+            )
+            try await code.save(on: db)
+            return code
         }
 
         func findPhoneCode(
             forPhone phone: String,
             codeHash: String
         ) async throws -> (any Identity.Verification.PhoneCode)? {
-            // TODO: Implement with PhoneVerificationCodeModel
-            fatalError("CodeStore.findPhoneCode not implemented")
+            try await PhoneVerificationCodeModel.query(on: db)
+                .filter(\.$phone == phone)
+                .filter(\.$codeHash == codeHash)
+                .filter(\.$invalidatedAt == nil)
+                .with(\.$user) { user in
+                    user.with(\.$identifiers)
+                }
+                .first()
         }
 
         func invalidatePhoneCodes(forPhone phone: String) async throws {
-            // TODO: Implement with PhoneVerificationCodeModel
-            fatalError("CodeStore.invalidatePhoneCodes not implemented")
+            try await PhoneVerificationCodeModel.query(on: db)
+                .filter(\.$phone == phone)
+                .filter(\.$invalidatedAt == nil)
+                .set(\.$invalidatedAt, to: .now)
+                .update()
         }
 
         func incrementFailedAttempts(for code: any Identity.Verification.PhoneCode) async throws {
-            // TODO: Implement with PhoneVerificationCodeModel
-            fatalError("CodeStore.incrementFailedAttempts(PhoneCode) not implemented")
+            guard let code = code as? PhoneVerificationCodeModel else {
+                throw IdentityError.unexpected(message: "Unexpected code type: \(type(of: code))")
+            }
+            code.failedAttempts += 1
+            try await code.save(on: db)
         }
     }
 }
