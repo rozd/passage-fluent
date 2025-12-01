@@ -1,13 +1,7 @@
-//
-//  UserModel.swift
-//  passten
-//
-//  Created by Max Rozdobudko on 11/25/25.
-//
-
 import Vapor
 import Fluent
 import FluentKit
+import Identity
 
 final class UserModel: Model, @unchecked Sendable {
     static let schema = "users"

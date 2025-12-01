@@ -1,11 +1,5 @@
-//
-//  PhoneResetCodeModel.swift
-//  passten
-//
-//  Created by Max Rozdobudko on 12/01/25.
-//
-
-import Vapor
+import Foundation
+import Identity
 import Fluent
 
 final class PhoneResetCodeModel: Model, @unchecked Sendable {

@@ -1,10 +1,3 @@
-//
-//  CreatePhoneResetCodeModel.swift
-//  passten
-//
-//  Created by Max Rozdobudko on 12/01/25.
-//
-
 import Fluent
 import SQLKit
 

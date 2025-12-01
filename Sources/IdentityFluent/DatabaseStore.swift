@@ -1,28 +1,21 @@
-//
-//  DatabaseStore.swift
-//  passten
-//
-//  Created by Max Rozdobudko on 11/25/25.
-//
-
 import Vapor
 import Fluent
-import JWT
 import Crypto
+import Identity
 
-struct DatabaseStore: Identity.Store {
+public struct DatabaseStore: Identity.Store {
 
     let db: any Database
 
-    let users: any Identity.UserStore
+    public let users: any Identity.UserStore
 
-    let tokens: any Identity.TokenStore
+    public let tokens: any Identity.TokenStore
 
-    let codes: any Identity.CodeStore
+    public let codes: any Identity.CodeStore
 
-    let resetCodes: any Identity.ResetCodeStore
+    public let resetCodes: any Identity.ResetCodeStore
 
-    init(app: Application, db: any Database) {
+    public init(app: Application, db: any Database) {
         self.db = db
         self.users = UserStore(db: db)
         self.tokens = TokenStore(app: app, db: db)

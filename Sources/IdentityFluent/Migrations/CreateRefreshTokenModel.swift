@@ -1,10 +1,3 @@
-//
-//  CreateRefreshTokenModel.swift
-//  passten
-//
-//  Created by Max Rozdobudko on 11/26/25.
-//
-
 import Fluent
 import SQLKit
 

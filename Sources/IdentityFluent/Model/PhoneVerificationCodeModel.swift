@@ -1,12 +1,6 @@
-//
-//  PhoneVerificationCodeModel.swift
-//  passten
-//
-//  Created by Max Rozdobudko on 11/29/25.
-//
-
 import Vapor
 import Fluent
+import Identity
 
 final class PhoneVerificationCodeModel: Model, @unchecked Sendable {
     static let schema = "phone_verification_codes"

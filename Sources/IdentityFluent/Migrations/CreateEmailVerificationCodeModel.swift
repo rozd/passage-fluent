@@ -1,10 +1,3 @@
-//
-//  CreateEmailVerificationCodeModel.swift
-//  passten
-//
-//  Created by Max Rozdobudko on 11/29/25.
-//
-
 import Fluent
 import SQLKit
 

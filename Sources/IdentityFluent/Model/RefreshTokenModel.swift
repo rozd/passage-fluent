@@ -1,11 +1,5 @@
-//
-//  RefreshTokenModel.swift
-//  passten
-//
-//  Created by Max Rozdobudko on 11/26/25.
-//
-
-import Vapor
+import Foundation
+import Identity
 import Fluent
 
 final class RefreshTokenModel: Model, @unchecked Sendable {

@@ -1,12 +1,6 @@
-//
-//  EmailVerificationCodeModel.swift
-//  passten
-//
-//  Created by Max Rozdobudko on 11/29/25.
-//
-
 import Vapor
 import Fluent
+import Identity
 
 final class EmailVerificationCodeModel: Model, @unchecked Sendable {
     static let schema = "email_verification_codes"

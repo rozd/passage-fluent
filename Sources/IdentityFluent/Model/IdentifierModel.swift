@@ -1,10 +1,3 @@
-//
-//  IdentifierModel.swift
-//  passten
-//
-//  Created by Max Rozdobudko on 11/26/25.
-//
-
 import Foundation
 import Fluent
 
