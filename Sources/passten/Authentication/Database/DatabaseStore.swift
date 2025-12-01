@@ -20,16 +20,21 @@ struct DatabaseStore: Identity.Store {
 
     let codes: any Identity.CodeStore
 
+    let resetCodes: any Identity.ResetCodeStore
+
     init(app: Application, db: any Database) {
         self.db = db
         self.users = UserStore(db: db)
         self.tokens = TokenStore(app: app, db: db)
         self.codes = CodeStore(db: db)
+        self.resetCodes = ResetCodeStore(db: db)
         app.migrations.add(CreateUserModel())
         app.migrations.add(CreateIdentifierModel())
         app.migrations.add(CreateRefreshTokenModel())
         app.migrations.add(CreateEmailVerificationCodeModel())
         app.migrations.add(CreatePhoneVerificationCodeModel())
+        app.migrations.add(CreateEmailResetCodeModel())
+        app.migrations.add(CreatePhoneResetCodeModel())
     }
 }
 
@@ -130,6 +135,15 @@ extension DatabaseStore {
                 .filter(\.$type == Identifier.Kind.phone.rawValue)
                 .set(\.$verified, to: true)
                 .update()
+        }
+
+        func setPassword(for user: any User, passwordHash: String) async throws {
+            guard let user = user as? UserModel else {
+                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+            }
+
+            user.passwordHash = passwordHash
+            try await user.save(on: db)
         }
 
     }
@@ -362,6 +376,120 @@ extension DatabaseStore {
 
         func incrementFailedAttempts(for code: any Identity.Verification.PhoneCode) async throws {
             guard let code = code as? PhoneVerificationCodeModel else {
+                throw IdentityError.unexpected(message: "Unexpected code type: \(type(of: code))")
+            }
+            code.failedAttempts += 1
+            try await code.save(on: db)
+        }
+    }
+}
+
+// MARK: - ResetCodeStore
+
+extension DatabaseStore {
+
+    struct ResetCodeStore: Identity.ResetCodeStore {
+
+        let db: any Database
+
+        // MARK: - Email Reset Codes
+
+        func createEmailResetCode(
+            for user: any User,
+            email: String,
+            codeHash: String,
+            expiresAt: Date
+        ) async throws -> any Identity.Restoration.EmailResetCode {
+            guard let user = user as? UserModel else {
+                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+            }
+
+            let code = EmailResetCodeModel(
+                email: email,
+                codeHash: codeHash,
+                userID: try user.requireID(),
+                expiresAt: expiresAt
+            )
+            try await code.save(on: db)
+            return code
+        }
+
+        func findEmailResetCode(
+            forEmail email: String,
+            codeHash: String
+        ) async throws -> (any Identity.Restoration.EmailResetCode)? {
+            try await EmailResetCodeModel.query(on: db)
+                .filter(\.$email == email)
+                .filter(\.$codeHash == codeHash)
+                .filter(\.$invalidatedAt == nil)
+                .with(\.$user) { user in
+                    user.with(\.$identifiers)
+                }
+                .first()
+        }
+
+        func invalidateEmailResetCodes(forEmail email: String) async throws {
+            try await EmailResetCodeModel.query(on: db)
+                .filter(\.$email == email)
+                .filter(\.$invalidatedAt == nil)
+                .set(\.$invalidatedAt, to: .now)
+                .update()
+        }
+
+        func incrementFailedAttempts(for code: any Identity.Restoration.EmailResetCode) async throws {
+            guard let code = code as? EmailResetCodeModel else {
+                throw IdentityError.unexpected(message: "Unexpected code type: \(type(of: code))")
+            }
+            code.failedAttempts += 1
+            try await code.save(on: db)
+        }
+
+        // MARK: - Phone Reset Codes
+
+        func createPhoneResetCode(
+            for user: any User,
+            phone: String,
+            codeHash: String,
+            expiresAt: Date
+        ) async throws -> any Identity.Restoration.PhoneResetCode {
+            guard let user = user as? UserModel else {
+                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+            }
+
+            let code = PhoneResetCodeModel(
+                phone: phone,
+                codeHash: codeHash,
+                userID: try user.requireID(),
+                expiresAt: expiresAt
+            )
+            try await code.save(on: db)
+            return code
+        }
+
+        func findPhoneResetCode(
+            forPhone phone: String,
+            codeHash: String
+        ) async throws -> (any Identity.Restoration.PhoneResetCode)? {
+            try await PhoneResetCodeModel.query(on: db)
+                .filter(\.$phone == phone)
+                .filter(\.$codeHash == codeHash)
+                .filter(\.$invalidatedAt == nil)
+                .with(\.$user) { user in
+                    user.with(\.$identifiers)
+                }
+                .first()
+        }
+
+        func invalidatePhoneResetCodes(forPhone phone: String) async throws {
+            try await PhoneResetCodeModel.query(on: db)
+                .filter(\.$phone == phone)
+                .filter(\.$invalidatedAt == nil)
+                .set(\.$invalidatedAt, to: .now)
+                .update()
+        }
+
+        func incrementFailedAttempts(for code: any Identity.Restoration.PhoneResetCode) async throws {
+            guard let code = code as? PhoneResetCodeModel else {
                 throw IdentityError.unexpected(message: "Unexpected code type: \(type(of: code))")
             }
             code.failedAttempts += 1
