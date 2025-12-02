@@ -1,19 +1,19 @@
 import Vapor
 import Fluent
 import Crypto
-import Identity
+import Passage
 
-public struct DatabaseStore: Identity.Store {
+public struct DatabaseStore: Passage.Store {
 
     let db: any Database
 
-    public let users: any Identity.UserStore
+    public let users: any Passage.UserStore
 
-    public let tokens: any Identity.TokenStore
+    public let tokens: any Passage.TokenStore
 
-    public let codes: any Identity.CodeStore
+    public let codes: any Passage.CodeStore
 
-    public let resetCodes: any Identity.ResetCodeStore
+    public let resetCodes: any Passage.ResetCodeStore
 
     public init(app: Application, db: any Database) {
         self.db = db
@@ -33,7 +33,7 @@ public struct DatabaseStore: Identity.Store {
 
 extension DatabaseStore {
 
-    struct UserStore: Identity.UserStore {
+    struct UserStore: Passage.UserStore {
         let db: any Database
 
         func find(byId id: String) async throws -> (any User)? {
@@ -108,7 +108,7 @@ extension DatabaseStore {
 
         func markEmailVerified(for user: any User) async throws {
             guard let user = user as? UserModel else {
-                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
             }
 
             try await IdentifierModel.query(on: db)
@@ -120,7 +120,7 @@ extension DatabaseStore {
 
         func markPhoneVerified(for user: any User) async throws {
             guard let user = user as? UserModel else {
-                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
             }
 
             try await IdentifierModel.query(on: db)
@@ -132,7 +132,7 @@ extension DatabaseStore {
 
         func setPassword(for user: any User, passwordHash: String) async throws {
             guard let user = user as? UserModel else {
-                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
             }
 
             user.passwordHash = passwordHash
@@ -147,7 +147,7 @@ extension DatabaseStore {
 
 extension DatabaseStore {
 
-    struct TokenStore: Identity.TokenStore {
+    struct TokenStore: Passage.TokenStore {
 
         let app: Application
         let db: any Database
@@ -172,7 +172,7 @@ extension DatabaseStore {
             replacing tokenToReplace: (any RefreshToken)?,
         ) async throws -> any RefreshToken {
             guard let user = user as? UserModel else {
-                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
             }
             return try await db.transaction { db in
                 let newRefreshToken = RefreshTokenModel(
@@ -188,7 +188,7 @@ extension DatabaseStore {
                 }
 
                 guard let oldRefreshToken = tokenToReplace as? RefreshTokenModel else {
-                    throw IdentityError.unexpected(message: "Unexpected token type: \(type(of: tokenToReplace))")
+                    throw PassageError.unexpected(message: "Unexpected token type: \(type(of: tokenToReplace))")
                 }
 
                 oldRefreshToken.revokedAt = .now
@@ -211,11 +211,11 @@ extension DatabaseStore {
 
         func revokeRefreshToken(for user: any User) async throws {
             guard let userId = user.id else {
-                throw IdentityError.unexpected(message: "User ID is missing")
+                throw PassageError.unexpected(message: "User ID is missing")
             }
 
             guard let userUUID = userId as? UUID else {
-                throw IdentityError.unexpected(message: "User ID must be UUID")
+                throw PassageError.unexpected(message: "User ID must be UUID")
             }
 
             try await RefreshTokenModel.query(on: db)
@@ -239,7 +239,7 @@ extension DatabaseStore {
 
         func revoke(refreshTokenFamilyStartingFrom token: any RefreshToken) async throws {
             guard let token = token as? RefreshTokenModel else {
-                throw IdentityError.unexpected(message: "Unexpected token type: \(type(of: token))")
+                throw PassageError.unexpected(message: "Unexpected token type: \(type(of: token))")
             }
 
             try await db.transaction { db in
@@ -267,7 +267,7 @@ extension DatabaseStore {
 
 extension DatabaseStore {
 
-    struct CodeStore: Identity.CodeStore {
+    struct CodeStore: Passage.CodeStore {
 
         let db: any Database
 
@@ -278,9 +278,9 @@ extension DatabaseStore {
             email: String,
             codeHash: String,
             expiresAt: Date
-        ) async throws -> any Identity.Verification.EmailCode {
+        ) async throws -> any Passage.Verification.EmailCode {
             guard let user = user as? UserModel else {
-                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
             }
 
             let code = EmailVerificationCodeModel(
@@ -296,7 +296,7 @@ extension DatabaseStore {
         func findEmailCode(
             forEmail email: String,
             codeHash: String
-        ) async throws -> (any Identity.Verification.EmailCode)? {
+        ) async throws -> (any Passage.Verification.EmailCode)? {
             try await EmailVerificationCodeModel.query(on: db)
                 .filter(\.$email == email)
                 .filter(\.$codeHash == codeHash)
@@ -315,9 +315,9 @@ extension DatabaseStore {
                 .update()
         }
 
-        func incrementFailedAttempts(for code: any Identity.Verification.EmailCode) async throws {
+        func incrementFailedAttempts(for code: any Passage.Verification.EmailCode) async throws {
             guard let code = code as? EmailVerificationCodeModel else {
-                throw IdentityError.unexpected(message: "Unexpected code type: \(type(of: code))")
+                throw PassageError.unexpected(message: "Unexpected code type: \(type(of: code))")
             }
             code.failedAttempts += 1
             try await code.save(on: db)
@@ -330,9 +330,9 @@ extension DatabaseStore {
             phone: String,
             codeHash: String,
             expiresAt: Date
-        ) async throws -> any Identity.Verification.PhoneCode {
+        ) async throws -> any Passage.Verification.PhoneCode {
             guard let user = user as? UserModel else {
-                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
             }
 
             let code = PhoneVerificationCodeModel(
@@ -348,7 +348,7 @@ extension DatabaseStore {
         func findPhoneCode(
             forPhone phone: String,
             codeHash: String
-        ) async throws -> (any Identity.Verification.PhoneCode)? {
+        ) async throws -> (any Passage.Verification.PhoneCode)? {
             try await PhoneVerificationCodeModel.query(on: db)
                 .filter(\.$phone == phone)
                 .filter(\.$codeHash == codeHash)
@@ -367,9 +367,9 @@ extension DatabaseStore {
                 .update()
         }
 
-        func incrementFailedAttempts(for code: any Identity.Verification.PhoneCode) async throws {
+        func incrementFailedAttempts(for code: any Passage.Verification.PhoneCode) async throws {
             guard let code = code as? PhoneVerificationCodeModel else {
-                throw IdentityError.unexpected(message: "Unexpected code type: \(type(of: code))")
+                throw PassageError.unexpected(message: "Unexpected code type: \(type(of: code))")
             }
             code.failedAttempts += 1
             try await code.save(on: db)
@@ -381,7 +381,7 @@ extension DatabaseStore {
 
 extension DatabaseStore {
 
-    struct ResetCodeStore: Identity.ResetCodeStore {
+    struct ResetCodeStore: Passage.ResetCodeStore {
 
         let db: any Database
 
@@ -392,9 +392,9 @@ extension DatabaseStore {
             email: String,
             codeHash: String,
             expiresAt: Date
-        ) async throws -> any Identity.Restoration.EmailResetCode {
+        ) async throws -> any Passage.Restoration.EmailResetCode {
             guard let user = user as? UserModel else {
-                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
             }
 
             let code = EmailResetCodeModel(
@@ -410,7 +410,7 @@ extension DatabaseStore {
         func findEmailResetCode(
             forEmail email: String,
             codeHash: String
-        ) async throws -> (any Identity.Restoration.EmailResetCode)? {
+        ) async throws -> (any Passage.Restoration.EmailResetCode)? {
             try await EmailResetCodeModel.query(on: db)
                 .filter(\.$email == email)
                 .filter(\.$codeHash == codeHash)
@@ -429,9 +429,9 @@ extension DatabaseStore {
                 .update()
         }
 
-        func incrementFailedAttempts(for code: any Identity.Restoration.EmailResetCode) async throws {
+        func incrementFailedAttempts(for code: any Passage.Restoration.EmailResetCode) async throws {
             guard let code = code as? EmailResetCodeModel else {
-                throw IdentityError.unexpected(message: "Unexpected code type: \(type(of: code))")
+                throw PassageError.unexpected(message: "Unexpected code type: \(type(of: code))")
             }
             code.failedAttempts += 1
             try await code.save(on: db)
@@ -444,9 +444,9 @@ extension DatabaseStore {
             phone: String,
             codeHash: String,
             expiresAt: Date
-        ) async throws -> any Identity.Restoration.PhoneResetCode {
+        ) async throws -> any Passage.Restoration.PhoneResetCode {
             guard let user = user as? UserModel else {
-                throw IdentityError.unexpected(message: "Unexpected user type: \(type(of: user))")
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
             }
 
             let code = PhoneResetCodeModel(
@@ -462,7 +462,7 @@ extension DatabaseStore {
         func findPhoneResetCode(
             forPhone phone: String,
             codeHash: String
-        ) async throws -> (any Identity.Restoration.PhoneResetCode)? {
+        ) async throws -> (any Passage.Restoration.PhoneResetCode)? {
             try await PhoneResetCodeModel.query(on: db)
                 .filter(\.$phone == phone)
                 .filter(\.$codeHash == codeHash)
@@ -481,9 +481,9 @@ extension DatabaseStore {
                 .update()
         }
 
-        func incrementFailedAttempts(for code: any Identity.Restoration.PhoneResetCode) async throws {
+        func incrementFailedAttempts(for code: any Passage.Restoration.PhoneResetCode) async throws {
             guard let code = code as? PhoneResetCodeModel else {
-                throw IdentityError.unexpected(message: "Unexpected code type: \(type(of: code))")
+                throw PassageError.unexpected(message: "Unexpected code type: \(type(of: code))")
             }
             code.failedAttempts += 1
             try await code.save(on: db)

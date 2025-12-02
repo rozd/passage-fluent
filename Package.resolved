@@ -91,6 +91,15 @@
       }
     },
     {
+      "identity" : "passage",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/rozd/passage.git",
+      "state" : {
+        "revision" : "05e5e40fc732c0e41017319e2bd0f2f3219da1fc",
+        "version" : "0.0.1"
+      }
+    },
+    {
       "identity" : "queues",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor/queues.git",

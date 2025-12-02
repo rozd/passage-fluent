@@ -1,5 +1,5 @@
 import Foundation
-import Identity
+import Passage
 import Fluent
 
 final class RefreshTokenModel: Model, @unchecked Sendable {

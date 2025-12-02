@@ -1,7 +1,7 @@
 import Vapor
 import Fluent
 import FluentKit
-import Identity
+import Passage
 
 final class UserModel: Model, @unchecked Sendable {
     static let schema = "users"

@@ -1,15 +1,15 @@
-import Foundation
-import Identity
+import Vapor
 import Fluent
+import Passage
 
-final class EmailResetCodeModel: Model, @unchecked Sendable {
-    static let schema = "email_reset_codes"
+final class PhoneVerificationCodeModel: Model, @unchecked Sendable {
+    static let schema = "phone_verification_codes"
 
     @ID(key: .id)
     var id: UUID?
 
-    @Field(key: "email")
-    var email: String
+    @Field(key: "phone")
+    var phone: String
 
     @Field(key: "code_hash")
     var codeHash: String
@@ -33,14 +33,14 @@ final class EmailResetCodeModel: Model, @unchecked Sendable {
 
     init(
         id: UUID? = nil,
-        email: String,
+        phone: String,
         codeHash: String,
         userID: UUID,
         expiresAt: Date,
         failedAttempts: Int = 0
     ) {
         self.id = id
-        self.email = email
+        self.phone = phone
         self.codeHash = codeHash
         self.$user.id = userID
         self.expiresAt = expiresAt
@@ -48,6 +48,6 @@ final class EmailResetCodeModel: Model, @unchecked Sendable {
     }
 }
 
-extension EmailResetCodeModel: Identity.Restoration.EmailResetCode {
+extension PhoneVerificationCodeModel: Passage.Verification.PhoneCode {
 
 }

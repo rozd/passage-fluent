@@ -2,22 +2,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "vapor-identity-store-fluent",
+    name: "passage-fluent",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .library(name: "IdentityFluent", targets: ["IdentityFluent"]),
+        .library(name: "PassageFluent", targets: ["PassageFluent"]),
     ],
     dependencies: [
-        .package(path: "../vapor-identity"),
+        .package(url: "https://github.com/rozd/passage.git", from: "0.0.1"),
         .package(url: "https://github.com/vapor/fluent.git", from: "4.13.0"),
     ],
     targets: [
         .target(
-            name: "IdentityFluent",
+            name: "PassageFluent",
             dependencies: [
-                .product(name: "Identity", package: "vapor-identity"),
+                .product(name: "Passage", package: "passage"),
                 .product(name: "Fluent", package: "fluent"),
             ]
         ),
