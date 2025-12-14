@@ -1,7 +1,7 @@
 # passage-fluent
 
 [![Release](https://img.shields.io/github/v/release/rozd/passage-fluent)](https://github.com/rozd/passage-fluent/releases)
-[![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange.svg)](https://swift.org)
+[![Swift 6.2](https://img.shields.io/badge/Swift-6.2-orange.svg)](https://swift.org)
 [![License](https://img.shields.io/github/license/rozd/passage-fluent)](LICENSE)
 [![codecov](https://codecov.io/gh/rozd/passage-fluent/branch/main/graph/badge.svg)](https://codecov.io/gh/rozd/passage-fluent)
 
@@ -106,7 +106,7 @@ let store = DatabaseStore(app: app, db: app.db)
 
 ## Requirements
 
-- Swift 5.9+
+- Swift 6.2+
 - macOS 13+ / Linux
 - Vapor 4.119+
 - Fluent 4.13+
