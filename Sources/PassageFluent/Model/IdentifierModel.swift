@@ -16,6 +16,9 @@ final class IdentifierModel: Model, @unchecked Sendable {
     @Field(key: "value")
     var value: String
 
+    @OptionalField(key: "provider")
+    var provider: String?
+
     @Field(key: "verified")
     var verified: Bool
 
@@ -24,11 +27,12 @@ final class IdentifierModel: Model, @unchecked Sendable {
 
     init() {}
 
-    init(id: UUID? = nil, userID: UUID, type: String, value: String, verified: Bool = false) {
+    init(id: UUID? = nil, userID: UUID, type: String, value: String, provider: String? = nil, verified: Bool = false) {
         self.id = id
         self.$user.id = userID
         self.type = type
         self.value = value
+        self.provider = provider
         self.verified = verified
     }
 }

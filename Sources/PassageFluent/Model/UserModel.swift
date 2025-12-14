@@ -3,27 +3,27 @@ import Fluent
 import FluentKit
 import Passage
 
-final class UserModel: Model, @unchecked Sendable {
-    static let schema = "users"
+public final class UserModel: Model, ModelSessionAuthenticatable, @unchecked Sendable {
+    public static let schema = "users"
 
     @ID(key: .id)
-    var id: UUID?
+    public var id: UUID?
 
     @Field(key: "password_hash")
-    var passwordHash: String?
+    public var passwordHash: String?
 
     @Timestamp(key: "created_at", on: .create)
-    var createdAt: Date?
+    public var createdAt: Date?
 
     @Timestamp(key: "updated_at", on: .update)
-    var updatedAt: Date?
+    public var updatedAt: Date?
 
     @Children(for: \.$user)
     var identifiers: [IdentifierModel]
 
-    init() {}
+    public init() {}
 
-    init(id: UUID? = nil, passwordHash: String? = nil) {
+    public init(id: UUID? = nil, passwordHash: String? = nil) {
         self.id = id
         self.passwordHash = passwordHash
     }
@@ -44,29 +44,28 @@ extension UserModel: User {
         identifiers.first { $0.type == "username" }
     }
 
-    var email: String? {
+    public var email: String? {
         emailIdentifier?.value
     }
     
-    var phone: String? {
+    public var phone: String? {
         phoneIdentifier?.value
     }
     
-    var username: String? {
+    public var username: String? {
         usernameIdentifier?.value
     }
     
-    var isAnonymous: Bool {
+    public var isAnonymous: Bool {
         email == nil && phone == nil && username == nil
     }
     
-    var isEmailVerified: Bool {
+    public var isEmailVerified: Bool {
         emailIdentifier?.verified == true
     }
     
-    var isPhoneVerified: Bool {
+    public var isPhoneVerified: Bool {
         phoneIdentifier?.verified == true
     }
-    
 
 }

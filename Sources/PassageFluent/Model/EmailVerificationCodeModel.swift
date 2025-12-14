@@ -48,6 +48,6 @@ final class EmailVerificationCodeModel: Model, @unchecked Sendable {
     }
 }
 
-extension EmailVerificationCodeModel: Passage.Verification.EmailCode {
+extension EmailVerificationCodeModel: EmailVerificationCode {
 
 }

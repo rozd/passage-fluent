@@ -9,9 +9,10 @@ struct CreateIdentifierModel: AsyncMigration {
             .field("user_id", .uuid, .required, .references(UserModel.schema, "id", onDelete: .cascade))
             .field("type", .string, .required)
             .field("value", .string, .required)
+            .field("provider", .string)
             .field("verified", .bool, .required)
             .field("created_at", .datetime)
-            .unique(on: "type", "value")
+            .unique(on: "type", "provider", "value")
             .create()
     }
 

@@ -10,8 +10,9 @@ let package = Package(
         .library(name: "PassageFluent", targets: ["PassageFluent"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/rozd/passage.git", from: "0.0.1"),
+        .package(url: "https://github.com/vapor/vapor.git", from: "4.119.0"),
         .package(url: "https://github.com/vapor/fluent.git", from: "4.13.0"),
+        .package(url: "https://github.com/vapor-community/passage.git", from: "0.0.3"),
     ],
     targets: [
         .target(

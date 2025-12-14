@@ -3,7 +3,7 @@ import SQLKit
 
 struct CreateEmailResetCodeModel: AsyncMigration {
     func prepare(on database: any Database) async throws {
-        try await database.schema(EmailResetCodeModel.schema)
+        try await database.schema(EmailPasswordResetCodeModel.schema)
             .id()
             .field("email", .string, .required)
             .field("code_hash", .string, .required)
@@ -16,16 +16,16 @@ struct CreateEmailResetCodeModel: AsyncMigration {
 
         // Index on email for lookup queries
         try await (database as? any SQLDatabase)?.raw(
-            "CREATE INDEX idx_email_reset_codes_email ON \(unsafeRaw: EmailResetCodeModel.schema) (email)"
+            "CREATE INDEX idx_email_reset_codes_email ON \(unsafeRaw: EmailPasswordResetCodeModel.schema) (email)"
         ).run()
 
         // Index on expires_at for cleanup queries
         try await (database as? any SQLDatabase)?.raw(
-            "CREATE INDEX idx_email_reset_codes_expires_at ON \(unsafeRaw: EmailResetCodeModel.schema) (expires_at)"
+            "CREATE INDEX idx_email_reset_codes_expires_at ON \(unsafeRaw: EmailPasswordResetCodeModel.schema) (expires_at)"
         ).run()
     }
 
     func revert(on database: any Database) async throws {
-        try await database.schema(EmailResetCodeModel.schema).delete()
+        try await database.schema(EmailPasswordResetCodeModel.schema).delete()
     }
 }

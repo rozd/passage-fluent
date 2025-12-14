@@ -2,8 +2,8 @@ import Foundation
 import Passage
 import Fluent
 
-final class EmailResetCodeModel: Model, @unchecked Sendable {
-    static let schema = "email_reset_codes"
+final class EmailPasswordResetCodeModel: Model, @unchecked Sendable {
+    static let schema = "email_password_reset_codes"
 
     @ID(key: .id)
     var id: UUID?
@@ -48,6 +48,6 @@ final class EmailResetCodeModel: Model, @unchecked Sendable {
     }
 }
 
-extension EmailResetCodeModel: Passage.Restoration.EmailResetCode {
+extension EmailPasswordResetCodeModel: EmailPasswordResetCode {
 
 }

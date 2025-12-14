@@ -3,7 +3,7 @@ import SQLKit
 
 struct CreatePhoneResetCodeModel: AsyncMigration {
     func prepare(on database: any Database) async throws {
-        try await database.schema(PhoneResetCodeModel.schema)
+        try await database.schema(PhonePasswordResetCodeModel.schema)
             .id()
             .field("phone", .string, .required)
             .field("code_hash", .string, .required)
@@ -16,16 +16,16 @@ struct CreatePhoneResetCodeModel: AsyncMigration {
 
         // Index on phone for lookup queries
         try await (database as? any SQLDatabase)?.raw(
-            "CREATE INDEX idx_phone_reset_codes_phone ON \(unsafeRaw: PhoneResetCodeModel.schema) (phone)"
+            "CREATE INDEX idx_phone_reset_codes_phone ON \(unsafeRaw: PhonePasswordResetCodeModel.schema) (phone)"
         ).run()
 
         // Index on expires_at for cleanup queries
         try await (database as? any SQLDatabase)?.raw(
-            "CREATE INDEX idx_phone_reset_codes_expires_at ON \(unsafeRaw: PhoneResetCodeModel.schema) (expires_at)"
+            "CREATE INDEX idx_phone_reset_codes_expires_at ON \(unsafeRaw: PhonePasswordResetCodeModel.schema) (expires_at)"
         ).run()
     }
 
     func revert(on database: any Database) async throws {
-        try await database.schema(PhoneResetCodeModel.schema).delete()
+        try await database.schema(PhonePasswordResetCodeModel.schema).delete()
     }
 }

@@ -48,6 +48,6 @@ final class PhoneVerificationCodeModel: Model, @unchecked Sendable {
     }
 }
 
-extension PhoneVerificationCodeModel: Passage.Verification.PhoneCode {
+extension PhoneVerificationCodeModel: PhoneVerificationCode {
 
 }

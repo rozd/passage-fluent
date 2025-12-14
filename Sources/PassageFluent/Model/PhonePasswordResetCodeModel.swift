@@ -2,8 +2,8 @@ import Foundation
 import Passage
 import Fluent
 
-final class PhoneResetCodeModel: Model, @unchecked Sendable {
-    static let schema = "phone_reset_codes"
+final class PhonePasswordResetCodeModel: Model, @unchecked Sendable {
+    static let schema = "phone_password_reset_codes"
 
     @ID(key: .id)
     var id: UUID?
@@ -48,6 +48,6 @@ final class PhoneResetCodeModel: Model, @unchecked Sendable {
     }
 }
 
-extension PhoneResetCodeModel: Passage.Restoration.PhoneResetCode {
+extension PhonePasswordResetCodeModel: PhonePasswordResetCode {
 
 }
