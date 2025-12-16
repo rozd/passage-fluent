@@ -110,7 +110,7 @@ struct UserWorkflowIntegrationTests {
 
         // 1. Create user via federated login (no password)
         let user = try await store.users.create(
-            identifier: .federated("google", userId: "google-123"),
+            identifier: .federated(.named("google"), userId: "google-123"),
             with: nil
         )
 

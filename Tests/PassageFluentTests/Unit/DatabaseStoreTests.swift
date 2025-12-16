@@ -160,7 +160,7 @@ struct UserStoreTests {
         let (app, store) = try await createTestApplicationWithStore()
         defer { Task { try? await shutdownTestApplication(app) } }
 
-        let identifier = Identifier.federated("google", userId: "google-user-123")
+        let identifier = Identifier.federated(.google, userId: "google-user-123")
 
         let user = try await store.users.create(identifier: identifier, with: nil)
 
@@ -227,7 +227,7 @@ struct UserStoreTests {
         let (app, store) = try await createTestApplicationWithStore()
         defer { Task { try? await shutdownTestApplication(app) } }
 
-        let identifier = Identifier.federated("google", userId: "google-user-123")
+        let identifier = Identifier.federated(.google, userId: "google-user-123")
         _ = try await store.users.create(identifier: identifier, with: nil)
 
         let result = try await store.users.find(byIdentifier: identifier)
@@ -283,7 +283,7 @@ struct UserStoreTests {
         defer { Task { try? await shutdownTestApplication(app) } }
 
         // Create user without password (federated)
-        let federatedIdentifier = Identifier.federated("google", userId: "google-123")
+        let federatedIdentifier = Identifier.federated(.google, userId: "google-123")
         let user = try await store.users.create(identifier: federatedIdentifier, with: nil)
 
         #expect(user.passwordHash == nil)

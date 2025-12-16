@@ -71,7 +71,7 @@ struct TestFixtures {
     }
 
     static var federatedIdentifier: Identifier {
-        .federated("google", userId: "google-user-123")
+        .federated(.named("google"), userId: "google-user-123")
     }
 
     static var passwordCredential: Credential {

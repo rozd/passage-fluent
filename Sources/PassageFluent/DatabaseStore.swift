@@ -73,7 +73,7 @@ extension DatabaseStore {
 
             // For federated identifiers, also match on provider
             if identifier.kind == .federated {
-                existingQuery = existingQuery.filter(\.$provider == identifier.provider)
+                existingQuery = existingQuery.filter(\.$provider == identifier.provider?.description)
             }
 
             let existing = try await existingQuery.first()
@@ -97,7 +97,7 @@ extension DatabaseStore {
                     userID: try user.requireID(),
                     type: identifier.kind.rawValue,
                     value: identifier.value,
-                    provider: identifier.provider,
+                    provider: identifier.provider?.description,
                     verified: identifier.kind == .federated  // Federated identifiers are pre-verified
                 )
                 try await identifierModel.save(on: db)
@@ -116,7 +116,7 @@ extension DatabaseStore {
 
             // For federated identifiers, also match on provider
             if identifier.kind == .federated {
-                query = query.filter(\.$provider == identifier.provider)
+                query = query.filter(\.$provider == identifier.provider?.description)
             }
 
             let existing = try await query
@@ -147,7 +147,7 @@ extension DatabaseStore {
                 .filter(\.$value == identifier.value)
 
             if identifier.kind == .federated {
-                existingQuery = existingQuery.filter(\.$provider == identifier.provider)
+                existingQuery = existingQuery.filter(\.$provider == identifier.provider?.description)
             }
 
             let existing = try await existingQuery.first()
@@ -167,7 +167,7 @@ extension DatabaseStore {
                     userID: try user.requireID(),
                     type: identifier.kind.rawValue,
                     value: identifier.value,
-                    provider: identifier.provider,
+                    provider: identifier.provider?.description,
                     verified: identifier.kind == .federated
                 )
                 try await identifierModel.save(on: db)

@@ -247,7 +247,7 @@ struct TokenWorkflowIntegrationTests {
 
         // 1. User authenticates via OAuth, create exchange token
         let user = try await store.users.create(
-            identifier: .federated("google", userId: "google-123"),
+            identifier: .federated(.google, userId: "google-123"),
             with: nil
         )
 

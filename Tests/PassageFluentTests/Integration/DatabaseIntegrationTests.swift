@@ -262,13 +262,13 @@ struct DatabaseIntegrationTests {
 
         // Create user with google federated ID
         _ = try await store.users.create(
-            identifier: .federated("google", userId: "user-123"),
+            identifier: .federated(.google, userId: "user-123"),
             with: nil
         )
 
         // Create user with same ID but different provider
         let user2 = try await store.users.create(
-            identifier: .federated("github", userId: "user-123"),
+            identifier: .federated(.github, userId: "user-123"),
             with: nil
         )
 
