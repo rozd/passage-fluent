@@ -104,8 +104,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor-community/passage.git",
       "state" : {
-        "revision" : "bdb9457b81845a6128d6f7c72919ad10bcead038",
-        "version" : "0.0.8"
+        "revision" : "aab7faad8bd554c19dadc9df4f10619c6d722fe1",
+        "version" : "0.0.9"
       }
     },
     {
