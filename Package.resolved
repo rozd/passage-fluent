@@ -104,8 +104,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor-community/passage.git",
       "state" : {
-        "revision" : "dc573ac813963da76612f8baa848d6e76408a91b",
-        "version" : "0.0.11"
+        "revision" : "0eb6a4165f9321d179b5198769fd1cc4f8cd59ec",
+        "version" : "0.0.12"
       }
     },
     {
@@ -338,8 +338,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swiftlang/swift-syntax.git",
       "state" : {
-        "revision" : "ef367f7370c51200ed95b384e03d545f59c7fc98",
-        "version" : "603.0.0-prerelease-2025-10-30"
+        "revision" : "9b6d2d09c474336c8a5477a669ca976e58586f75",
+        "version" : "603.0.0-prerelease-2025-12-17"
       }
     },
     {
@@ -357,7 +357,7 @@
       "location" : "https://github.com/apple/swift-testing.git",
       "state" : {
         "branch" : "main",
-        "revision" : "1d3961a0b006c25bec5301a01f4ba4fbfa7253c6"
+        "revision" : "60575940e9bde723f02996a72048d00f0c671f12"
       }
     },
     {
