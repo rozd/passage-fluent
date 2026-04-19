@@ -7,7 +7,7 @@
 
 Fluent database storage implementation for [Passage](https://github.com/vapor-community/passage) authentication framework.
 
-This package provides persistent storage for all Passage authentication data using Vapor's Fluent ORM, including users, refresh tokens, verification codes, and password reset codes.
+This package provides persistent storage for all Passage authentication data using Vapor's Fluent ORM, including users, refresh tokens, verification codes, password reset codes, and passkey (WebAuthn) credentials and challenges.
 
 > **Note:** This package cannot be used standalone. It requires [Passage](https://github.com/vapor-community/passage) and a Fluent database driver (PostgreSQL, MySQL, SQLite, etc.) to function.
 
@@ -71,6 +71,8 @@ The following tables are automatically created:
 | `email_password_reset_codes` | Email-based password reset codes |
 | `phone_password_reset_codes` | Phone-based password reset codes |
 | `exchange_tokens` | OAuth exchange tokens for federated login |
+| `passkey_credentials` | WebAuthn credential records (credential ID, COSE public key, sign count, transports, backup state) |
+| `passkey_challenges` | One-shot passkey ceremony challenges, stored as SHA-256 hashes with TTL and consumption tracking |
 
 ## Features
 
@@ -91,6 +93,16 @@ The following tables are automatically created:
 - Failed attempt tracking for rate limiting
 - Automatic code invalidation after use
 - Separate flows for email and phone
+
+### Passkey Storage (WebAuthn)
+- Full W3C credential record persistence: credential ID, COSE public key, sign count, transports, backup-eligibility, AAGUID, attestation format
+- Transparent SHA-256 hashing of challenge bytes — plain-text challenges never touch the database
+- One-shot challenge consumption with expiry for both registration and authentication ceremonies
+- Nullable user binding for discoverable-authentication flows (where the user is unknown at challenge issuance)
+- `cleanupExpiredPasskeyChallenges(before:)` for periodic GC of abandoned ceremonies
+- Cascade-delete on user removal wipes the user's credentials and user-bound challenges
+
+`DatabaseStore` conforms to the optional `Passage.PasskeyCredentialStore` and `Passage.PasskeyChallengeStore` sub-stores out of the box — passkey flows in `Passage` light up as soon as a `PasskeyService` is registered. See [vapor-community/passage](https://github.com/vapor-community/passage) for the service-side configuration.
 
 ## Using a Different Database
 

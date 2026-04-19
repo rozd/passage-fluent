@@ -249,3 +249,106 @@ extension ExchangeTokenModel {
         )
     }
 }
+
+// MARK: - Passkey Fixtures
+
+extension TestFixtures {
+
+    /// Canonical base64url-encoded credential ID used across passkey tests.
+    static let testCredentialID = "Y3JlZGVudGlhbC1pZC10ZXN0"
+
+    /// Small, deterministic COSE_Key-ish byte blob.
+    static var testPublicKey: Data {
+        Data([0xA5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01, 0x21])
+    }
+
+    /// Deterministic challenge bytes. Chosen small so tests stay readable;
+    /// SHA-256 hex is derived via `bytes.sha256Hex`.
+    static var testChallengeBytes: Data {
+        Data([0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11, 0x22, 0x33])
+    }
+
+    static func makePasskeyCredential(
+        credentialID: String = TestFixtures.testCredentialID,
+        publicKey: Data = TestFixtures.testPublicKey,
+        signCount: UInt32 = 0,
+        uvInitialized: Bool = true,
+        transports: [AuthenticatorTransport] = [.internal, .hybrid],
+        backupEligible: Bool = true,
+        isBackedUp: Bool = false,
+        aaguid: String? = "00000000-0000-0000-0000-000000000000",
+        attestationFormat: String? = "none"
+    ) -> PasskeyCredential {
+        PasskeyCredential(
+            credentialID: credentialID,
+            publicKey: publicKey,
+            signCount: signCount,
+            uvInitialized: uvInitialized,
+            transports: transports,
+            backupEligible: backupEligible,
+            isBackedUp: isBackedUp,
+            aaguid: aaguid,
+            attestationFormat: attestationFormat
+        )
+    }
+
+    static func makePasskeyChallenge(
+        bytes: Data = TestFixtures.testChallengeBytes,
+        kind: PasskeyChallengeKind = .registration,
+        expiresAt: Date = TestFixtures.futureDate
+    ) -> PasskeyChallenge {
+        PasskeyChallenge(bytes: bytes, kind: kind, expiresAt: expiresAt)
+    }
+}
+
+extension PasskeyCredentialModel {
+    /// Creates a test passkey credential model with default values.
+    static func createTest(
+        id: UUID? = nil,
+        userID: UUID,
+        credentialID: String = TestFixtures.testCredentialID,
+        publicKey: Data = TestFixtures.testPublicKey,
+        signCount: UInt32 = 0,
+        uvInitialized: Bool = true,
+        transports: [AuthenticatorTransport] = [.internal],
+        backupEligible: Bool = true,
+        isBackedUp: Bool = false,
+        aaguid: String? = "00000000-0000-0000-0000-000000000000",
+        attestationFormat: String? = "none"
+    ) -> PasskeyCredentialModel {
+        PasskeyCredentialModel(
+            id: id,
+            userID: userID,
+            credentialID: credentialID,
+            publicKey: publicKey,
+            signCount: signCount,
+            uvInitialized: uvInitialized,
+            transports: transports,
+            backupEligible: backupEligible,
+            isBackedUp: isBackedUp,
+            aaguid: aaguid,
+            attestationFormat: attestationFormat
+        )
+    }
+}
+
+extension PasskeyChallengeModel {
+    /// Creates a test passkey challenge model with default values.
+    static func createTest(
+        id: UUID? = nil,
+        userID: UUID? = nil,
+        kind: PasskeyChallengeKind = .registration,
+        challengeHash: String = TestFixtures.testChallengeBytes.sha256Hex,
+        expiresAt: Date = TestFixtures.futureDate,
+        consumedAt: Date? = nil
+    ) -> PasskeyChallengeModel {
+        PasskeyChallengeModel(
+            id: id,
+            userID: userID,
+            kind: kind,
+            challengeHash: challengeHash,
+            expiresAt: expiresAt,
+            consumedAt: consumedAt
+        )
+    }
+}

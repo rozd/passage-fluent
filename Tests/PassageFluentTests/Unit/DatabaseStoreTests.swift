@@ -24,6 +24,8 @@ struct DatabaseStoreTests {
         #expect(store.restorationCodes is DatabaseStore.ResetCodeStore)
         #expect(store.magicLinkTokens is DatabaseStore.MagicLinkTokenStore)
         #expect(store.exchangeTokens is DatabaseStore.ExchangeTokenStore)
+        #expect(store.passkeyCredentials is DatabaseStore.PasskeyCredentialStore)
+        #expect(store.passkeyChallenges is DatabaseStore.PasskeyChallengeStore)
     }
 
     @Test("DatabaseStore registers all migrations")
@@ -60,6 +62,12 @@ struct DatabaseStoreTests {
 
         let exchangeTokens = try await ExchangeTokenModel.query(on: app.db).count()
         #expect(exchangeTokens == 0)
+
+        let passkeyCredentials = try await PasskeyCredentialModel.query(on: app.db).count()
+        #expect(passkeyCredentials == 0)
+
+        let passkeyChallenges = try await PasskeyChallengeModel.query(on: app.db).count()
+        #expect(passkeyChallenges == 0)
     }
 }
 

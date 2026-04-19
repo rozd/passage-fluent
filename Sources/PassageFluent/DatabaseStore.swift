@@ -19,6 +19,10 @@ public struct DatabaseStore: Passage.Store {
 
     public let exchangeTokens: any Passage.ExchangeTokenStore
 
+    public let passkeyCredentials: (any Passage.PasskeyCredentialStore)?
+
+    public let passkeyChallenges: (any Passage.PasskeyChallengeStore)?
+
     public init(app: Application, db: any Database) {
         self.db = db
         self.users = UserStore(db: db)
@@ -27,6 +31,8 @@ public struct DatabaseStore: Passage.Store {
         self.restorationCodes = ResetCodeStore(db: db)
         self.magicLinkTokens = MagicLinkTokenStore(db: db)
         self.exchangeTokens = ExchangeTokenStore(db: db)
+        self.passkeyCredentials = PasskeyCredentialStore(db: db)
+        self.passkeyChallenges = PasskeyChallengeStore(db: db)
         app.migrations.add(CreateUserModel())
         app.migrations.add(CreateIdentifierModel())
         app.migrations.add(CreateRefreshTokenModel())
@@ -35,6 +41,8 @@ public struct DatabaseStore: Passage.Store {
         app.migrations.add(CreateEmailResetCodeModel())
         app.migrations.add(CreatePhoneResetCodeModel())
         app.migrations.add(CreateExchangeTokenModel())
+        app.migrations.add(CreatePasskeyCredentialModel())
+        app.migrations.add(CreatePasskeyChallengeModel())
     }
 }
 
@@ -654,6 +662,155 @@ extension DatabaseStore {
 
         func cleanupExpiredTokens(before date: Date) async throws {
             try await ExchangeTokenModel.query(on: db)
+                .filter(\.$expiresAt < date)
+                .delete()
+        }
+    }
+}
+
+// MARK: - PasskeyCredentialStore
+
+extension DatabaseStore {
+
+    struct PasskeyCredentialStore: Passage.PasskeyCredentialStore {
+
+        let db: any Database
+
+        func createPasskeyCredential(
+            for user: any User,
+            from credential: PasskeyCredential
+        ) async throws -> any StoredPasskeyCredential {
+            guard let user = user as? UserModel else {
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
+            }
+
+            return try await db.transaction { db in
+                let model = PasskeyCredentialModel(
+                    userID: try user.requireID(),
+                    credentialID: credential.credentialID,
+                    publicKey: credential.publicKey,
+                    signCount: credential.signCount,
+                    uvInitialized: credential.uvInitialized,
+                    transports: credential.transports,
+                    backupEligible: credential.backupEligible,
+                    isBackedUp: credential.isBackedUp,
+                    aaguid: credential.aaguid,
+                    attestationFormat: credential.attestationFormat
+                )
+                try await model.save(on: db)
+
+                try await model.$user.load(on: db)
+                try await model.user.$identifiers.load(on: db)
+
+                return model
+            }
+        }
+
+        func find(byCredentialID credentialID: String) async throws -> (any StoredPasskeyCredential)? {
+            try await PasskeyCredentialModel.query(on: db)
+                .filter(\.$credentialID == credentialID)
+                .with(\.$user) { user in
+                    user.with(\.$identifiers)
+                }
+                .first()
+        }
+
+        func listPasskeyCredentials(forUser user: any User) async throws -> [any StoredPasskeyCredential] {
+            guard let user = user as? UserModel else {
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
+            }
+
+            return try await PasskeyCredentialModel.query(on: db)
+                .filter(\.$user.$id == user.requireID())
+                .with(\.$user) { user in
+                    user.with(\.$identifiers)
+                }
+                .all()
+        }
+
+        func updatePasskeyCredentialAfterAuthentication(
+            forCredentialID credentialID: String,
+            newSignCount: UInt32,
+            isBackedUp: Bool
+        ) async throws {
+            guard let model = try await PasskeyCredentialModel.query(on: db)
+                .filter(\.$credentialID == credentialID)
+                .first()
+            else {
+                return
+            }
+
+            model.signCount = newSignCount
+            model.isBackedUp = isBackedUp
+            try await model.save(on: db)
+        }
+
+        func deletePasskeyCredential(byCredentialID credentialID: String) async throws {
+            try await PasskeyCredentialModel.query(on: db)
+                .filter(\.$credentialID == credentialID)
+                .delete()
+        }
+    }
+}
+
+// MARK: - PasskeyChallengeStore
+
+extension DatabaseStore {
+
+    struct PasskeyChallengeStore: Passage.PasskeyChallengeStore {
+
+        let db: any Database
+
+        func createPasskeyChallenge(
+            for user: (any User)?,
+            from challenge: PasskeyChallenge
+        ) async throws -> any StoredPasskeyChallenge {
+            let userID: UUID?
+            if let user = user {
+                guard let userModel = user as? UserModel else {
+                    throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
+                }
+                userID = try userModel.requireID()
+            } else {
+                userID = nil
+            }
+
+            let model = PasskeyChallengeModel(
+                userID: userID,
+                kind: challenge.kind,
+                challengeHash: challenge.bytes.sha256Hex,
+                expiresAt: challenge.expiresAt
+            )
+            try await model.save(on: db)
+
+            if userID != nil {
+                try await model.$user.load(on: db)
+                try await model.user?.$identifiers.load(on: db)
+            }
+
+            return model
+        }
+
+        func find(passkeyChallengeMatching bytes: Data) async throws -> (any StoredPasskeyChallenge)? {
+            try await PasskeyChallengeModel.query(on: db)
+                .filter(\.$challengeHash == bytes.sha256Hex)
+                .with(\.$user) { user in
+                    user.with(\.$identifiers)
+                }
+                .first()
+        }
+
+        func consume(passkeyChallenge: any StoredPasskeyChallenge) async throws {
+            guard let model = passkeyChallenge as? PasskeyChallengeModel else {
+                throw PassageError.unexpected(message: "Unexpected challenge type: \(type(of: passkeyChallenge))")
+            }
+
+            model.consumedAt = .now
+            try await model.save(on: db)
+        }
+
+        func cleanupExpiredPasskeyChallenges(before date: Date) async throws {
+            try await PasskeyChallengeModel.query(on: db)
                 .filter(\.$expiresAt < date)
                 .delete()
         }

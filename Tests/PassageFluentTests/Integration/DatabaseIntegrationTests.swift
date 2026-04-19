@@ -25,6 +25,8 @@ struct DatabaseIntegrationTests {
         let emailResetCount = try await EmailPasswordResetCodeModel.query(on: app.db).count()
         let phoneResetCount = try await PhonePasswordResetCodeModel.query(on: app.db).count()
         let exchangeCount = try await ExchangeTokenModel.query(on: app.db).count()
+        let passkeyCredentialCount = try await PasskeyCredentialModel.query(on: app.db).count()
+        let passkeyChallengeCount = try await PasskeyChallengeModel.query(on: app.db).count()
 
         #expect(userCount == 0)
         #expect(identifierCount == 0)
@@ -34,6 +36,8 @@ struct DatabaseIntegrationTests {
         #expect(emailResetCount == 0)
         #expect(phoneResetCount == 0)
         #expect(exchangeCount == 0)
+        #expect(passkeyCredentialCount == 0)
+        #expect(passkeyChallengeCount == 0)
     }
 
     @Test("Migrations can be reverted")
