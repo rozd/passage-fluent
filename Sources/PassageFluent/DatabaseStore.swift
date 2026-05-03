@@ -762,32 +762,52 @@ extension DatabaseStore {
         let db: any Database
 
         func createPasskeyChallenge(
-            for user: (any User)?,
             from challenge: PasskeyChallenge
         ) async throws -> any StoredPasskeyChallenge {
-            let userID: UUID?
-            if let user = user {
-                guard let userModel = user as? UserModel else {
-                    throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-                }
-                userID = try userModel.requireID()
-            } else {
-                userID = nil
+            let model = PasskeyChallengeModel(
+                userID: nil,
+                kind: challenge.kind,
+                challengeHash: challenge.bytes.sha256Hex,
+                expiresAt: challenge.expiresAt
+            )
+            try await model.save(on: db)
+            return model
+        }
+
+        func createPasskeyChallenge(
+            for user: any User,
+            from challenge: PasskeyChallenge
+        ) async throws -> any StoredPasskeyChallenge {
+            guard let userModel = user as? UserModel else {
+                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
             }
 
             let model = PasskeyChallengeModel(
-                userID: userID,
+                userID: try userModel.requireID(),
                 kind: challenge.kind,
                 challengeHash: challenge.bytes.sha256Hex,
                 expiresAt: challenge.expiresAt
             )
             try await model.save(on: db)
 
-            if userID != nil {
-                try await model.$user.load(on: db)
-                try await model.user?.$identifiers.load(on: db)
-            }
+            try await model.$user.load(on: db)
+            try await model.user?.$identifiers.load(on: db)
 
+            return model
+        }
+
+        func createPasskeyChallenge(
+            for identifier: Identifier,
+            from challenge: PasskeyChallenge
+        ) async throws -> any StoredPasskeyChallenge {
+            let model = PasskeyChallengeModel(
+                identifier: identifier,
+                userID: nil,
+                kind: challenge.kind,
+                challengeHash: challenge.bytes.sha256Hex,
+                expiresAt: challenge.expiresAt
+            )
+            try await model.save(on: db)
             return model
         }
 

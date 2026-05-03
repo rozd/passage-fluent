@@ -8,6 +8,9 @@ final class PasskeyChallengeModel: Model, @unchecked Sendable {
     @ID(key: .id)
     var id: UUID?
 
+    @OptionalField(key: "identifier")
+    var identifier: Identifier?
+
     @OptionalParent(key: "user_id")
     var user: UserModel?
 
@@ -30,6 +33,7 @@ final class PasskeyChallengeModel: Model, @unchecked Sendable {
 
     init(
         id: UUID? = nil,
+        identifier: Identifier? = nil,
         userID: UUID?,
         kind: PasskeyChallengeKind,
         challengeHash: String,
@@ -37,6 +41,7 @@ final class PasskeyChallengeModel: Model, @unchecked Sendable {
         consumedAt: Date? = nil
     ) {
         self.id = id
+        self.identifier = identifier
         self.$user.id = userID
         self.kindRaw = kind.rawValue
         self.challengeHash = challengeHash

@@ -336,6 +336,7 @@ extension PasskeyChallengeModel {
     /// Creates a test passkey challenge model with default values.
     static func createTest(
         id: UUID? = nil,
+        identifier: Identifier? = nil,
         userID: UUID? = nil,
         kind: PasskeyChallengeKind = .registration,
         challengeHash: String = TestFixtures.testChallengeBytes.sha256Hex,
@@ -344,6 +345,7 @@ extension PasskeyChallengeModel {
     ) -> PasskeyChallengeModel {
         PasskeyChallengeModel(
             id: id,
+            identifier: identifier,
             userID: userID,
             kind: kind,
             challengeHash: challengeHash,

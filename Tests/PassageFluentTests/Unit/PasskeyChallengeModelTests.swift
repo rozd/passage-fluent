@@ -26,9 +26,11 @@ struct PasskeyChallengeModelTests {
         let userID = UUID()
         let consumedAt = Date()
         let expiresAt = Date().addingTimeInterval(60)
+        let identifier = Identifier.email("init@example.com")
 
         let model = PasskeyChallengeModel(
             id: modelID,
+            identifier: identifier,
             userID: userID,
             kind: .authentication,
             challengeHash: "abc123",
@@ -37,6 +39,7 @@ struct PasskeyChallengeModelTests {
         )
 
         #expect(model.id == modelID)
+        #expect(model.identifier == identifier)
         #expect(model.$user.id == userID)
         #expect(model.kindRaw == "authentication")
         #expect(model.kind == .authentication)
@@ -54,6 +57,22 @@ struct PasskeyChallengeModelTests {
             expiresAt: Date().addingTimeInterval(60)
         )
 
+        #expect(model.$user.id == nil)
+        #expect(model.identifier == nil)
+    }
+
+    @Test("Initialization with identifier and nil userID is supported for guest registration")
+    func testInitWithIdentifierAndNoUser() {
+        let identifier = Identifier.email("guest@example.com")
+        let model = PasskeyChallengeModel(
+            identifier: identifier,
+            userID: nil,
+            kind: .registration,
+            challengeHash: "hash",
+            expiresAt: Date().addingTimeInterval(60)
+        )
+
+        #expect(model.identifier == identifier)
         #expect(model.$user.id == nil)
     }
 

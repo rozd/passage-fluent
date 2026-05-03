@@ -9,10 +9,10 @@ import FluentSQLiteDriver
 @Suite("DatabaseStore.PasskeyChallengeStore Tests")
 struct PasskeyChallengeStoreTests {
 
-    // MARK: - Create Tests
+    // MARK: - Create (for: User) Tests
 
-    @Test("createPasskeyChallenge persists hash and returns stored record")
-    func testCreatePersistsHashedChallenge() async throws {
+    @Test("createPasskeyChallenge(for: User) persists hash and binds the user")
+    func testCreateForUserPersistsHashedChallenge() async throws {
         let (app, store) = try await createTestApplicationWithStore()
         defer { Task { try? await shutdownTestApplication(app) } }
 
@@ -30,19 +30,21 @@ struct PasskeyChallengeStoreTests {
         #expect(stored.challengeHash == expected)
         #expect(stored.kind == .registration)
         #expect(stored.user?.email == "challenge@example.com")
+        #expect(stored.identifier == nil)
         #expect(stored.isConsumed == false)
         #expect(stored.isExpired == false)
     }
 
-    @Test("createPasskeyChallenge supports nil user for discoverable authentication")
-    func testCreateWithNilUser() async throws {
+    // MARK: - Create (from:) Tests — discoverable authentication
+
+    @Test("createPasskeyChallenge(from:) persists with no user and no identifier")
+    func testCreateFromForDiscoverableAuth() async throws {
         let (app, store) = try await createTestApplicationWithStore()
         defer { Task { try? await shutdownTestApplication(app) } }
 
         let challenges = try #require(store.passkeyChallenges)
 
         let stored = try await challenges.createPasskeyChallenge(
-            for: nil,
             from: TestFixtures.makePasskeyChallenge(
                 bytes: Data([0x01, 0x02, 0x03]),
                 kind: .authentication
@@ -50,7 +52,50 @@ struct PasskeyChallengeStoreTests {
         )
 
         #expect(stored.user == nil)
+        #expect(stored.identifier == nil)
         #expect(stored.kind == .authentication)
+    }
+
+    // MARK: - Create (for: Identifier) Tests — guest registration
+
+    @Test("createPasskeyChallenge(for: Identifier) persists identifier without binding a user")
+    func testCreateForIdentifierGuestRegistration() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let challenges = try #require(store.passkeyChallenges)
+        let identifier = Identifier.email("guest@example.com")
+
+        let stored = try await challenges.createPasskeyChallenge(
+            for: identifier,
+            from: TestFixtures.makePasskeyChallenge(
+                bytes: Data([0x10, 0x11, 0x12]),
+                kind: .registration
+            )
+        )
+
+        #expect(stored.user == nil)
+        #expect(stored.identifier == identifier)
+        #expect(stored.kind == .registration)
+    }
+
+    @Test("createPasskeyChallenge(for: Identifier) round-trips identifier through the database")
+    func testCreateForIdentifierRoundTrip() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let challenges = try #require(store.passkeyChallenges)
+        let bytes = Data([0x20, 0x21, 0x22])
+        let identifier = Identifier.username("guest-user")
+
+        _ = try await challenges.createPasskeyChallenge(
+            for: identifier,
+            from: TestFixtures.makePasskeyChallenge(bytes: bytes, kind: .registration)
+        )
+
+        let reloaded = try #require(try await challenges.find(passkeyChallengeMatching: bytes))
+        #expect(reloaded.identifier == identifier)
+        #expect(reloaded.user == nil)
     }
 
     @Test("createPasskeyChallenge rejects duplicate raw bytes (unique hash)")
@@ -61,13 +106,11 @@ struct PasskeyChallengeStoreTests {
         let challenges = try #require(store.passkeyChallenges)
 
         _ = try await challenges.createPasskeyChallenge(
-            for: nil,
             from: TestFixtures.makePasskeyChallenge(bytes: Data([0x42, 0x42]))
         )
 
         await #expect(throws: (any Error).self) {
             _ = try await challenges.createPasskeyChallenge(
-                for: nil,
                 from: TestFixtures.makePasskeyChallenge(bytes: Data([0x42, 0x42]))
             )
         }
@@ -116,11 +159,9 @@ struct PasskeyChallengeStoreTests {
         let bBytes = Data([0x03, 0x04])
 
         _ = try await challenges.createPasskeyChallenge(
-            for: nil,
             from: TestFixtures.makePasskeyChallenge(bytes: aBytes, kind: .registration)
         )
         _ = try await challenges.createPasskeyChallenge(
-            for: nil,
             from: TestFixtures.makePasskeyChallenge(bytes: bBytes, kind: .authentication)
         )
 
@@ -143,7 +184,6 @@ struct PasskeyChallengeStoreTests {
 
         let bytes = Data([0x99])
         let stored = try await challenges.createPasskeyChallenge(
-            for: nil,
             from: TestFixtures.makePasskeyChallenge(bytes: bytes)
         )
         #expect(stored.isValid == true)
@@ -164,7 +204,6 @@ struct PasskeyChallengeStoreTests {
 
         let bytes = Data([0x77, 0x77])
         let stored = try await challenges.createPasskeyChallenge(
-            for: nil,
             from: TestFixtures.makePasskeyChallenge(bytes: bytes)
         )
 
@@ -188,14 +227,12 @@ struct PasskeyChallengeStoreTests {
         let freshBytes   = Data([0x02, 0x03])
 
         _ = try await challenges.createPasskeyChallenge(
-            for: nil,
             from: TestFixtures.makePasskeyChallenge(
                 bytes: expiredBytes,
                 expiresAt: Date().addingTimeInterval(-60)
             )
         )
         _ = try await challenges.createPasskeyChallenge(
-            for: nil,
             from: TestFixtures.makePasskeyChallenge(
                 bytes: freshBytes,
                 expiresAt: Date().addingTimeInterval(60)
@@ -219,7 +256,6 @@ struct PasskeyChallengeStoreTests {
         let challenges = try #require(store.passkeyChallenges)
 
         _ = try await challenges.createPasskeyChallenge(
-            for: nil,
             from: TestFixtures.makePasskeyChallenge(
                 bytes: Data([0x10, 0x20]),
                 expiresAt: Date().addingTimeInterval(3600)
@@ -253,5 +289,24 @@ struct PasskeyChallengeStoreTests {
 
         let afterCascade = try await challenges.find(passkeyChallengeMatching: bytes)
         #expect(afterCascade == nil)
+    }
+
+    @Test("Identifier-bound challenges survive when no user exists yet")
+    func testIdentifierBoundChallengesAreIndependentOfUser() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let challenges = try #require(store.passkeyChallenges)
+        let bytes = Data([0xBE, 0xEF])
+        let identifier = Identifier.email("not-yet@example.com")
+
+        _ = try await challenges.createPasskeyChallenge(
+            for: identifier,
+            from: TestFixtures.makePasskeyChallenge(bytes: bytes, kind: .registration)
+        )
+
+        let reloaded = try #require(try await challenges.find(passkeyChallengeMatching: bytes))
+        #expect(reloaded.user == nil)
+        #expect(reloaded.identifier == identifier)
     }
 }
