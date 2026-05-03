@@ -5,6 +5,7 @@ struct CreatePasskeyChallengeModel: AsyncMigration {
     func prepare(on database: any Database) async throws {
         try await database.schema(PasskeyChallengeModel.schema)
             .id()
+            .field("identifier", .json)
             .field("user_id", .uuid, .references(UserModel.schema, "id", onDelete: .cascade))
             .field("kind", .string, .required)
             .field("challenge_hash", .string, .required)

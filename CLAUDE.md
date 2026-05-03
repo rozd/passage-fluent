@@ -33,7 +33,7 @@ This is a Swift package that provides a Fluent (database) implementation of the 
 - `EmailVerificationCodeModel` / `PhoneVerificationCodeModel` - Verification codes with expiration and attempt tracking
 - `EmailResetCodeModel` / `PhoneResetCodeModel` - Password reset codes
 - `PasskeyCredentialModel` - W3C credential record (credential ID, COSE public key, sign count, transports, backup state, AAGUID, attestation format); conforms to `Passage.StoredPasskeyCredential`
-- `PasskeyChallengeModel` - One-shot WebAuthn challenge; stores SHA-256 hash (never plain bytes), TTL, consumption timestamp; `@OptionalParent` user for discoverable auth; conforms to `Passage.StoredPasskeyChallenge`
+- `PasskeyChallengeModel` - One-shot WebAuthn challenge; stores SHA-256 hash (never plain bytes), TTL, consumption timestamp; `@OptionalParent` user (set during authenticated registration) and `@OptionalField` identifier (set during guest registration before the user exists); conforms to `Passage.StoredPasskeyChallenge`
 
 **Migrations** (`Sources/IdentityFluent/Migrations/`)
 - One migration per model, all use `AsyncMigration`
@@ -45,7 +45,7 @@ This is a Swift package that provides a Fluent (database) implementation of the 
 - Type-safe filtering with key paths (e.g., `\.$email == email`)
 - Nested eager loading via `.with(\.$user) { user in user.with(\.$identifiers) }`
 - Token rotation uses `replacedBy` field to track token chain for family revocation
-- Passkey challenges are hashed at the store boundary via `Data.sha256Hex` from the `Passage` package — callers pass raw bytes to `createPasskeyChallenge(for:from:)` and `find(passkeyChallengeMatching:)`, and the column is indexed on the hash
+- Passkey challenges are hashed at the store boundary via `Data.sha256Hex` from the `Passage` package — callers pass raw bytes to one of the three `createPasskeyChallenge` overloads (`from:` for discoverable auth, `for: User, from:` for an authenticated user adding a passkey, `for: Identifier, from:` for guest registration) and to `find(passkeyChallengeMatching:)`, and the column is indexed on the hash
 
 ### Optional Passkey Sub-Stores
 

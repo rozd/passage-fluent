@@ -97,8 +97,7 @@ The following tables are automatically created:
 ### Passkey Storage (WebAuthn)
 - Full W3C credential record persistence: credential ID, COSE public key, sign count, transports, backup-eligibility, AAGUID, attestation format
 - Transparent SHA-256 hashing of challenge bytes — plain-text challenges never touch the database
-- One-shot challenge consumption with expiry for both registration and authentication ceremonies
-- Nullable user binding for discoverable-authentication flows (where the user is unknown at challenge issuance)
+- One-shot challenge consumption with expiry for all three ceremony entry points: discoverable authentication (`createPasskeyChallenge(from:)`), authenticated user adding a passkey (`createPasskeyChallenge(for: User, from:)`), and guest registration where the user does not yet exist (`createPasskeyChallenge(for: Identifier, from:)`)
 - `cleanupExpiredPasskeyChallenges(before:)` for periodic GC of abandoned ceremonies
 - Cascade-delete on user removal wipes the user's credentials and user-bound challenges
 
