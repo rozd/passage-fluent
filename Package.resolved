@@ -1,5 +1,5 @@
 {
-  "originHash" : "dad537b8939fa8d1d5901ba71bbb7da64b363300c219f872b2255411a74c00eb",
+  "originHash" : "98a0ad574f34d9563bb668dc360097e2f93178ad093196ea884b33176e843edd",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -105,8 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor-community/passage.git",
       "state" : {
-        "revision" : "33689b2d38e96d951e5e42b142afb0979139132e",
-        "version" : "0.5.5"
+        "revision" : "e4b3e06f8b1451eef304bdea8f002bd120ce2f5b",
+        "version" : "0.5.6"
       }
     },
     {
@@ -376,7 +376,7 @@
       "location" : "https://github.com/apple/swift-testing.git",
       "state" : {
         "branch" : "main",
-        "revision" : "8737f7a544e1a74820e42d7de77430eb66727f7f"
+        "revision" : "33a04c7e447c2fa56e8d98fc310bb29032dd2763"
       }
     },
     {
