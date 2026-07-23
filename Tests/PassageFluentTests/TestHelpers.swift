@@ -332,6 +332,29 @@ extension PasskeyCredentialModel {
     }
 }
 
+extension MagicLinkTokenModel {
+    /// Creates a test magic link token model with default values.
+    static func createTest(
+        id: UUID? = nil,
+        email: String = TestFixtures.testEmail,
+        tokenHash: String = TestFixtures.testTokenHash,
+        userID: UUID? = nil,
+        sessionTokenHash: String? = nil,
+        expiresAt: Date = TestFixtures.futureDate,
+        failedAttempts: Int = 0
+    ) -> MagicLinkTokenModel {
+        MagicLinkTokenModel(
+            id: id,
+            email: email,
+            tokenHash: tokenHash,
+            userID: userID,
+            sessionTokenHash: sessionTokenHash,
+            expiresAt: expiresAt,
+            failedAttempts: failedAttempts
+        )
+    }
+}
+
 extension PasskeyChallengeModel {
     /// Creates a test passkey challenge model with default values.
     static func createTest(
