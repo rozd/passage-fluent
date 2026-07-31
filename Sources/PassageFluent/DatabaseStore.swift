@@ -41,6 +41,7 @@ public struct DatabaseStore: Passage.Store {
         app.migrations.add(CreateEmailResetCodeModel())
         app.migrations.add(CreatePhoneResetCodeModel())
         app.migrations.add(CreateExchangeTokenModel())
+        app.migrations.add(CreateMagicLinkTokenModel())
         app.migrations.add(CreatePasskeyCredentialModel())
         app.migrations.add(CreatePasskeyChallengeModel())
     }
@@ -591,19 +592,61 @@ extension DatabaseStore {
             sessionTokenHash: String?,
             expiresAt: Date,
         ) async throws -> any MagicLinkToken {
-            throw PassageError.unexpected(message: "Not implemented yet")
+guard identifier.kind == .email else {
+    throw PassageError.unexpected(message: "Expected email identifier, got \(identifier.kind)")
+}
+
+let userID: UUID?
+if let user = user {
+    guard let userModel = user as? UserModel else {
+        throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
+    }
+    userID = try userModel.requireID()
+} else {
+    userID = nil
+}
+
+            let model = MagicLinkTokenModel(
+                email: identifier.value,
+                tokenHash: tokenHash,
+                userID: userID,
+                sessionTokenHash: sessionTokenHash,
+                expiresAt: expiresAt
+            )
+            try await model.save(on: db)
+
+            if userID != nil {
+                try await model.$user.load(on: db)
+                try await model.user?.$identifiers.load(on: db)
+            }
+
+            return model
         }
 
         func findEmailMagicLink(tokenHash: String) async throws -> (any MagicLinkToken)? {
-            throw PassageError.unexpected(message: "Not implemented yet")
+            try await MagicLinkTokenModel.query(on: db)
+                .filter(\.$tokenHash == tokenHash)
+                .filter(\.$invalidatedAt == nil)
+                .with(\.$user) { user in
+                    user.with(\.$identifiers)
+                }
+                .first()
         }
 
         func invalidateEmailMagicLinks(for identifier: Identifier) async throws {
-            throw PassageError.unexpected(message: "Not implemented yet")
+            try await MagicLinkTokenModel.query(on: db)
+                .filter(\.$email == identifier.value)
+                .filter(\.$invalidatedAt == nil)
+                .set(\.$invalidatedAt, to: .now)
+                .update()
         }
 
         func incrementFailedAttempts(for magicLink: any MagicLinkToken) async throws {
-            throw PassageError.unexpected(message: "Not implemented yet")
+            guard let model = magicLink as? MagicLinkTokenModel else {
+                throw PassageError.unexpected(message: "Unexpected magic link type: \(type(of: magicLink))")
+            }
+            model.failedAttempts += 1
+            try await model.save(on: db)
         }
 
     }
