@@ -592,15 +592,19 @@ extension DatabaseStore {
             sessionTokenHash: String?,
             expiresAt: Date,
         ) async throws -> any MagicLinkToken {
-            let userID: UUID?
-            if let user = user {
-                guard let userModel = user as? UserModel else {
-                    throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-                }
-                userID = try userModel.requireID()
-            } else {
-                userID = nil
-            }
+guard identifier.kind == .email else {
+    throw PassageError.unexpected(message: "Expected email identifier, got \(identifier.kind)")
+}
+
+let userID: UUID?
+if let user = user {
+    guard let userModel = user as? UserModel else {
+        throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
+    }
+    userID = try userModel.requireID()
+} else {
+    userID = nil
+}
 
             let model = MagicLinkTokenModel(
                 email: identifier.value,
