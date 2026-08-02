@@ -46,10 +46,17 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
 
-      - name: Setup Swift
-        uses: swift-actions/setup-swift@v3
+      # setup-swift is not used here: it string-compares the requested version
+      # against the installed one, so asking for '6.3' on a toolchain reporting
+      # '6.3.3' fails the check. The macos runner image already ships the Swift
+      # toolchain inside Xcode, so selecting Xcode is enough.
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          swift-version: '6.3'
+          xcode-version: latest-stable
+
+      - name: Report Swift version
+        run: swift --version
 
       - name: Cache Swift packages
         uses: actions/cache@v4
@@ -128,39 +135,29 @@ jobs:
 
       - name: Check if main branch
         id: check-branch
+        env:
+          REF: ${{ inputs.ref || github.ref }}
         run: |
-          REF="${{ inputs.ref || github.ref }}"
           if [[ "$REF" == "refs/heads/main" || "$REF" == "refs/heads/master" || "$REF" == "main" || "$REF" == "master" ]]; then
-            echo "is-main=true" >> $GITHUB_OUTPUT
+            echo "is-main=true" >> "$GITHUB_OUTPUT"
           else
-            echo "is-main=false" >> $GITHUB_OUTPUT
+            echo "is-main=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Get version from tags
+      # Used only to label the intermediate archive. The authoritative version
+      # for a real release is computed by the calculate-version job.
+      - name: Get next version
         id: get-version
-        run: |
-          # Get latest tag
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
-          LATEST_TAG="${LATEST_TAG#v}"  # Remove 'v' prefix if present
-
-          echo "Latest tag: $LATEST_TAG"
-
-          # Parse version components
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_TAG"
-
-          # Increment patch version for new releases
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-
-          echo "New version: $NEW_VERSION"
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        run: ./.github/scripts/next-version.sh
 
       - name: Create archive (intermediate releases only)
         id: archive
         if: steps.check-branch.outputs.is-main == 'false'
+        env:
+          VERSION: ${{ steps.get-version.outputs.version }}
+          REF: ${{ inputs.ref || github.ref }}
         run: |
-          VERSION="${{ steps.get-version.outputs.version }}"
-          BRANCH_NAME=$(echo "${{ inputs.ref || github.ref }}" | sed 's|refs/heads/||' | sed 's|/|-|g')
+          BRANCH_NAME=$(echo "$REF" | sed 's|refs/heads/||' | sed 's|/|-|g')
           SHORT_SHA=$(git rev-parse --short HEAD)
           ARCHIVE_NAME="passage-fluent-${VERSION}-${BRANCH_NAME}-${SHORT_SHA}.zip"
 
@@ -205,9 +202,10 @@ jobs:
       - name: Merge PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr-number }}
         run: |
-          echo "Merging PR #${{ inputs.pr-number }}"
-          gh pr merge ${{ inputs.pr-number }} --squash --delete-branch
+          echo "Merging PR #${PR_NUMBER}"
+          gh pr merge "${PR_NUMBER}" --squash --delete-branch
 
   post-merge-release:
     runs-on: ubuntu-latest
@@ -220,35 +218,57 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Get version from tags
+      # Runs against main *after* the PR was merged, so the commit range picked
+      # up here includes the merged work and bumps accordingly.
+      - name: Calculate next version
         id: get-version
-        run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
-          LATEST_TAG="${LATEST_TAG#v}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_TAG"
-          NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        run: ./.github/scripts/next-version.sh
 
       - name: Create and push tag
+        env:
+          VERSION: ${{ steps.get-version.outputs.version }}
         run: |
-          VERSION="${{ steps.get-version.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${VERSION}" -m "Release ${VERSION}"
           git push origin "${VERSION}"
 
+      - name: Generate changelog
+        env:
+          VERSION: ${{ steps.get-version.outputs.version }}
+          PREVIOUS_TAG: ${{ steps.get-version.outputs.previous-tag }}
+        run: ./.github/scripts/changelog.sh
+
       - name: Create GitHub Release
         env:
+          VERSION: ${{ steps.get-version.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ steps.get-version.outputs.version }}"
           gh release create "${VERSION}" \
             --title "Release ${VERSION}" \
-            --generate-notes
+            --notes-file RELEASE_NOTES.md
+
+  calculate-version:
+    runs-on: ubuntu-latest
+    needs: build-test-archive
+    if: needs.build-test-archive.outputs.is-main == 'true'
+    outputs:
+      version: ${{ steps.calculate.outputs.version }}
+      previous-tag: ${{ steps.calculate.outputs.previous-tag }}
+      bump: ${{ steps.calculate.outputs.bump }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate next version
+        id: calculate
+        run: ./.github/scripts/next-version.sh
 
   public-release:
     runs-on: ubuntu-latest
-    needs: build-test-archive
+    needs: [build-test-archive, calculate-version]
     if: needs.build-test-archive.outputs.is-main == 'true'
     steps:
       - name: Checkout repository
@@ -257,19 +277,25 @@ jobs:
           fetch-depth: 0
 
       - name: Create and push tag
+        env:
+          VERSION: ${{ needs.calculate-version.outputs.version }}
         run: |
-          VERSION="${{ needs.build-test-archive.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${VERSION}" -m "Release ${VERSION}"
           git push origin "${VERSION}"
 
+      - name: Generate changelog
+        env:
+          VERSION: ${{ needs.calculate-version.outputs.version }}
+          PREVIOUS_TAG: ${{ needs.calculate-version.outputs.previous-tag }}
+        run: ./.github/scripts/changelog.sh
+
       - name: Create GitHub Release
         env:
+          VERSION: ${{ needs.calculate-version.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ needs.build-test-archive.outputs.version }}"
-
           gh release create "${VERSION}" \
             --title "Release ${VERSION}" \
-            --generate-notes
+            --notes-file RELEASE_NOTES.md

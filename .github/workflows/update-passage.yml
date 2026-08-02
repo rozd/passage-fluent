@@ -31,29 +31,34 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Swift
-        uses: swift-actions/setup-swift@v3
+      # See release.yml for why setup-swift is not used.
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          swift-version: '6.3'
+          xcode-version: latest-stable
 
-      - name: Extract version
+      # Both sources are attacker-influenced (client_payload is free-form), so
+      # they are passed through the environment rather than interpolated into
+      # the script, and validated before any later step consumes them.
+      - name: Extract and validate version
         id: get-version
+        env:
+          DISPATCH_VERSION: ${{ github.event.client_payload.version }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            VERSION="${{ github.event.client_payload.version }}"
+          if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
+            VERSION="${DISPATCH_VERSION}"
           else
-            VERSION="${{ github.event.inputs.version }}"
+            VERSION="${INPUT_VERSION}"
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Updating to passage version: $VERSION"
 
-      - name: Validate version format
-        run: |
-          VERSION="${{ steps.get-version.outputs.version }}"
-          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Error: Invalid version format. Expected semver (x.y.z), got: $VERSION"
+          if ! echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Invalid version format. Expected semver (x.y.z), got: ${VERSION}"
             exit 1
           fi
+
+          echo "version=${VERSION}" >>"${GITHUB_OUTPUT}"
+          echo "Updating to passage version: ${VERSION}"
 
       - name: Check if branch already exists
         id: check-branch
