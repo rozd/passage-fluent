@@ -2,8 +2,8 @@ import Foundation
 import Passage
 import Fluent
 
-final class MagicLinkTokenModel: Model, @unchecked Sendable {
-    static let schema = "magic_link_tokens"
+final class MagicLinkTokenModel<UserModel: PassageUserModel>: Model, @unchecked Sendable {
+    static var schema: String { "magic_link_tokens" }
 
     @ID(key: .id)
     var id: UUID?
@@ -38,7 +38,7 @@ final class MagicLinkTokenModel: Model, @unchecked Sendable {
         id: UUID? = nil,
         email: String,
         tokenHash: String,
-        userID: UUID?,
+        userID: UserModel.IDValue?,
         sessionTokenHash: String? = nil,
         expiresAt: Date,
         failedAttempts: Int = 0

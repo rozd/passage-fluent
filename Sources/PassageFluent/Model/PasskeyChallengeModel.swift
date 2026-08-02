@@ -2,8 +2,8 @@ import Foundation
 import Passage
 import Fluent
 
-final class PasskeyChallengeModel: Model, @unchecked Sendable {
-    static let schema = "passkey_challenges"
+final class PasskeyChallengeModel<UserModel: PassageUserModel>: Model, @unchecked Sendable {
+    static var schema: String { "passkey_challenges" }
 
     @ID(key: .id)
     var id: UUID?
@@ -34,7 +34,7 @@ final class PasskeyChallengeModel: Model, @unchecked Sendable {
     init(
         id: UUID? = nil,
         identifier: Identifier? = nil,
-        userID: UUID?,
+        userID: UserModel.IDValue?,
         kind: PasskeyChallengeKind,
         challengeHash: String,
         expiresAt: Date,

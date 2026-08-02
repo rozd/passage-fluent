@@ -2,8 +2,8 @@ import Vapor
 import Fluent
 import Passage
 
-final class EmailVerificationCodeModel: Model, @unchecked Sendable {
-    static let schema = "email_verification_codes"
+final class EmailVerificationCodeModel<UserModel: PassageUserModel>: Model, @unchecked Sendable {
+    static var schema: String { "email_verification_codes" }
 
     @ID(key: .id)
     var id: UUID?
@@ -35,7 +35,7 @@ final class EmailVerificationCodeModel: Model, @unchecked Sendable {
         id: UUID? = nil,
         email: String,
         codeHash: String,
-        userID: UUID,
+        userID: UserModel.IDValue,
         expiresAt: Date,
         failedAttempts: Int = 0
     ) {

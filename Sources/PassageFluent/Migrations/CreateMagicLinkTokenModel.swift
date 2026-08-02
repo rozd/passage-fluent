@@ -1,13 +1,15 @@
 import Fluent
 import SQLKit
 
-struct CreateMagicLinkTokenModel: AsyncMigration {
+struct CreateMagicLinkTokenModel<UserModel: PassageUserModel>: AsyncMigration {
+    var name: String { "PassageFluent.CreateMagicLinkTokenModel" }
+
     func prepare(on database: any Database) async throws {
-        try await database.schema(MagicLinkTokenModel.schema)
+        try await database.schema(MagicLinkTokenModel<UserModel>.schema)
             .id()
             .field("email", .string, .required)
             .field("token_hash", .string, .required)
-            .field("user_id", .uuid, .references(UserModel.schema, "id", onDelete: .cascade))
+            .field("user_id", UserModel.passageUserIDDataType, .references(UserModel.schema, space: UserModel.space, UserModel.passageUserIDFieldKey, onDelete: .cascade))
             .field("session_token_hash", .string)
             .field("expires_at", .datetime, .required)
             .field("failed_attempts", .int, .required)
@@ -18,26 +20,26 @@ struct CreateMagicLinkTokenModel: AsyncMigration {
 
         // Index on token_hash for findEmailMagicLink(tokenHash:) query performance
         try await (database as? any SQLDatabase)?.raw(
-            "CREATE INDEX idx_magic_link_tokens_token_hash ON \(unsafeRaw: MagicLinkTokenModel.schema) (token_hash)"
+            "CREATE INDEX idx_magic_link_tokens_token_hash ON \(unsafeRaw: MagicLinkTokenModel<UserModel>.schema) (token_hash)"
         ).run()
 
         // Index on email for invalidateEmailMagicLinks(for:) query performance
         try await (database as? any SQLDatabase)?.raw(
-            "CREATE INDEX idx_magic_link_tokens_email ON \(unsafeRaw: MagicLinkTokenModel.schema) (email)"
+            "CREATE INDEX idx_magic_link_tokens_email ON \(unsafeRaw: MagicLinkTokenModel<UserModel>.schema) (email)"
         ).run()
 
         // Index on expires_at for future cleanup queries
         try await (database as? any SQLDatabase)?.raw(
-            "CREATE INDEX idx_magic_link_tokens_expires_at ON \(unsafeRaw: MagicLinkTokenModel.schema) (expires_at)"
+            "CREATE INDEX idx_magic_link_tokens_expires_at ON \(unsafeRaw: MagicLinkTokenModel<UserModel>.schema) (expires_at)"
         ).run()
 
         // Index on invalidated_at for active-row filtering in findEmailMagicLink
         try await (database as? any SQLDatabase)?.raw(
-            "CREATE INDEX idx_magic_link_tokens_invalidated_at ON \(unsafeRaw: MagicLinkTokenModel.schema) (invalidated_at)"
+            "CREATE INDEX idx_magic_link_tokens_invalidated_at ON \(unsafeRaw: MagicLinkTokenModel<UserModel>.schema) (invalidated_at)"
         ).run()
     }
 
     func revert(on database: any Database) async throws {
-        try await database.schema(MagicLinkTokenModel.schema).delete()
+        try await database.schema(MagicLinkTokenModel<UserModel>.schema).delete()
     }
 }

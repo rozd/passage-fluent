@@ -1,12 +1,14 @@
 import Fluent
 import SQLKit
 
-struct CreatePasskeyChallengeModel: AsyncMigration {
+struct CreatePasskeyChallengeModel<UserModel: PassageUserModel>: AsyncMigration {
+    var name: String { "PassageFluent.CreatePasskeyChallengeModel" }
+
     func prepare(on database: any Database) async throws {
-        try await database.schema(PasskeyChallengeModel.schema)
+        try await database.schema(PasskeyChallengeModel<UserModel>.schema)
             .id()
             .field("identifier", .json)
-            .field("user_id", .uuid, .references(UserModel.schema, "id", onDelete: .cascade))
+            .field("user_id", UserModel.passageUserIDDataType, .references(UserModel.schema, space: UserModel.space, UserModel.passageUserIDFieldKey, onDelete: .cascade))
             .field("kind", .string, .required)
             .field("challenge_hash", .string, .required)
             .field("expires_at", .datetime, .required)
@@ -17,16 +19,16 @@ struct CreatePasskeyChallengeModel: AsyncMigration {
 
         // Index on challenge_hash for find(passkeyChallengeMatching:) query performance.
         try await (database as? any SQLDatabase)?.raw(
-            "CREATE INDEX idx_passkey_challenges_challenge_hash ON \(unsafeRaw: PasskeyChallengeModel.schema) (challenge_hash)"
+            "CREATE INDEX idx_passkey_challenges_challenge_hash ON \(unsafeRaw: PasskeyChallengeModel<UserModel>.schema) (challenge_hash)"
         ).run()
 
         // Index on expires_at for cleanupExpiredPasskeyChallenges(before:) query performance.
         try await (database as? any SQLDatabase)?.raw(
-            "CREATE INDEX idx_passkey_challenges_expires_at ON \(unsafeRaw: PasskeyChallengeModel.schema) (expires_at)"
+            "CREATE INDEX idx_passkey_challenges_expires_at ON \(unsafeRaw: PasskeyChallengeModel<UserModel>.schema) (expires_at)"
         ).run()
     }
 
     func revert(on database: any Database) async throws {
-        try await database.schema(PasskeyChallengeModel.schema).delete()
+        try await database.schema(PasskeyChallengeModel<UserModel>.schema).delete()
     }
 }

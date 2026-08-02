@@ -2,8 +2,8 @@ import Foundation
 import Passage
 import Fluent
 
-final class RefreshTokenModel: Model, @unchecked Sendable {
-    static let schema = "refresh_tokens"
+final class RefreshTokenModel<UserModel: PassageUserModel>: Model, @unchecked Sendable {
+    static var schema: String { "refresh_tokens" }
 
     @ID(key: .id)
     var id: UUID?
@@ -31,7 +31,7 @@ final class RefreshTokenModel: Model, @unchecked Sendable {
     init(
         id: UUID? = nil,
         tokenHash: String,
-        userID: UUID,
+        userID: UserModel.IDValue,
         expiresAt: Date,
         revokedAt: Date? = nil,
         replacedBy: UUID? = nil

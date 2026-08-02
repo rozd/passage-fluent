@@ -103,6 +103,199 @@ The following tables are automatically created:
 
 `DatabaseStore` conforms to the optional `Passage.PasskeyCredentialStore` and `Passage.PasskeyChallengeStore` sub-stores out of the box — passkey flows in `Passage` light up as soon as a `PasskeyService` is registered. See [vapor-community/passage](https://github.com/vapor-community/passage) for the service-side configuration.
 
+## Bring Your Own User Model (Overlay Mode)
+
+By default, `DatabaseStore` creates its own `users` and `identifiers` tables (**island mode**). If your app already has a user table, use **overlay mode** to reuse it.
+
+> **Note:** Overlay mode supports **all identifier kinds** — email, phone, username, and federated — exactly like island mode. The `identifiers` table (S1) remains the source of truth for lookups. The example below is intentionally narrow: it models an existing table with a `NOT NULL email` column, which is why `storedEmail` is non-optional and `passageMakeUser` throws for non-email identifiers. Those are constraints of the *example schema*, not of overlay mode — a model with nullable columns can accept every identifier kind (the default `passageMakeUser` already does).
+
+### Step 1: Conform Your User Model to `PassageUserModel`
+
+```swift
+import Passage
+import PassageFluent
+
+final class AppUser: Model, PassageUserModel, ModelSessionAuthenticatable, @unchecked Sendable {
+    static let schema = "app_users"
+    
+    @ID(custom: "id", generatedBy: .database)
+    var id: Int?
+    
+    // Stored with a distinct name: a non-optional `String` cannot witness
+    // Passage.User's `var email: String? { get }` requirement directly.
+    @Field(key: "email")
+    var storedEmail: String
+    
+    @Field(key: "email_verified")
+    var emailVerified: Bool
+    
+    @OptionalField(key: "password_hash")
+    var passwordHash: String?
+    
+    // ... other fields
+    
+    // MARK: - PassageUserModel Conformance
+    
+    /// Called when creating a new user (e.g., during registration).
+    /// Override to populate required columns from the identifier.
+    static func passageMakeUser(identifier: Identifier, passwordHash: String?) throws -> AppUser {
+        // This table's NOT NULL email column can't store other kinds —
+        // a schema with nullable columns can accept phone/username/federated too.
+        guard identifier.kind == .email else {
+            throw PassageError.unexpected(message: "Only email identifiers supported")
+        }
+        let user = AppUser()
+        user.storedEmail = identifier.value
+        user.emailVerified = false
+        user.passwordHash = passwordHash
+        return user
+    }
+    
+    /// Override if you track verification state in your own columns.
+    /// Called after the `IdentifierModel` row is marked verified.
+    static func passageDidMarkIdentifierVerified(
+        _ kind: Identifier.Kind,
+        for user: AppUser,
+        on db: any Database
+    ) async throws {
+        if kind == .email {
+            user.emailVerified = true
+            try await user.save(on: db)
+        }
+    }
+}
+
+// MARK: - Passage.User Conformance
+
+extension AppUser: User {
+    public var email: String? { storedEmail.isEmpty ? nil : storedEmail }
+    public var phone: String? { nil }
+    public var username: String? { nil }
+    public var isAnonymous: Bool { storedEmail.isEmpty }
+    public var isEmailVerified: Bool { emailVerified }
+    public var isPhoneVerified: Bool { false }
+}
+```
+
+**Conformance Requirements:**
+- `final class` — required by `PassageUserModel`'s `Self`-returning requirements (and Fluent convention)
+- `@unchecked Sendable` — required for Vapor concurrency
+- `SessionAuthenticatable` — easiest via `ModelSessionAuthenticatable` mixin
+- Single-column `@ID` (UUID, Int, String, or custom `Codable` type) — no `@CompositeID`
+- Implement `Passage.User` computed properties (email, phone, username, isEmailVerified, etc.)
+
+### Step 2: Register Your User Table Migration First
+
+The FK ordering requirement: PassageFluent's dependent tables reference your user table, so your user migration must run before PassageFluent migrations.
+
+```swift
+app.migrations.add(CreateAppUser())  // Your user table
+```
+
+### Step 3a: Overlay Mode S1 — Default Stores
+
+Inject your user model type; PassageFluent creates the `identifiers` table and all token/code tables:
+
+```swift
+let store = DatabaseStore(
+    app: app,
+    db: app.db,
+    userModelType: AppUser.self
+)
+```
+
+### Step 3b: Overlay Mode S3 — Custom User Store
+
+Provide both the model type AND a custom `Passage.UserStore` implementation that operates on your user table. PassageFluent skips creating the `identifiers` table:
+
+```swift
+struct AppUserStore: Passage.UserStore {
+    typealias ConcreateUser = AppUser
+    
+    let db: any Database
+    
+    var userType: AppUser.Type { AppUser.self }
+    
+    func find(byIdentifier identifier: Identifier) async throws -> (any User)? {
+        // Query your app_users table directly. This demo store only resolves
+        // emails — implement whichever kinds your schema can answer.
+        guard identifier.kind == .email else { return nil }
+        return try await AppUser.query(on: db)
+            .filter(\.$storedEmail == identifier.value)
+            .first()
+    }
+    
+    // ... implement other required methods
+}
+
+let store = DatabaseStore(
+    app: app,
+    db: app.db,
+    userModelType: AppUser.self,
+    userStore: AppUserStore(db: app.db)
+)
+```
+
+### ID Type Flexibility
+
+Support any Fluent ID type — UUID (default), Int, String, or custom:
+
+```swift
+// Int ID example (supported out-of-box)
+@ID(custom: "id", generatedBy: .database)
+var id: Int?
+
+// String ID example (supported out-of-box)
+@ID
+var id: String?
+
+// Custom type (implement passageParseUserID and passageUserIDDataType)
+@ID
+var id: MyCustomID?
+```
+
+### Migration Control
+
+Control which migrations are registered via the `registerMigrations:` parameter:
+
+```swift
+// Register Passage migrations (default = true)
+let store = DatabaseStore(
+    app: app,
+    db: app.db,
+    userModelType: AppUser.self,
+    registerMigrations: true
+)
+
+// Manual control (advanced)
+app.migrations.add(
+    contentsOf: DatabaseStore.migrations(
+        for: AppUser.self,
+        includeIdentifiers: true,  // S1 mode
+        isIslandMode: false
+    )
+)
+```
+
+### Alternative: `@Children` Pattern
+
+If you don't override `PassageUserModel` hooks, derive Passage.User computed properties from the `identifiers` relationship:
+
+```swift
+extension AppUser: User {
+    @Children(for: \.$user)
+    var identifiers: [IdentifierModel<AppUser>]
+    
+    public var email: String? {
+        identifiers.first { $0.type == "email" }?.value
+    }
+    
+    public var isEmailVerified: Bool {
+        identifiers.first { $0.type == "email" }?.verified == true
+    }
+}
+```
+
 ## Using a Different Database
 
 Pass any Fluent database to `DatabaseStore`:

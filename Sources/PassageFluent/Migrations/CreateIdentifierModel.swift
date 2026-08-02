@@ -2,11 +2,13 @@ import Fluent
 
 // MARK: - CreateIdentifierModel
 
-struct CreateIdentifierModel: AsyncMigration {
+struct CreateIdentifierModel<UserModel: PassageUserModel>: AsyncMigration {
+    var name: String { "PassageFluent.CreateIdentifierModel" }
+
     func prepare(on database: any Database) async throws {
-        try await database.schema(IdentifierModel.schema)
+        try await database.schema(IdentifierModel<UserModel>.schema)
             .id()
-            .field("user_id", .uuid, .required, .references(UserModel.schema, "id", onDelete: .cascade))
+            .field("user_id", UserModel.passageUserIDDataType, .required, .references(UserModel.schema, space: UserModel.space, UserModel.passageUserIDFieldKey, onDelete: .cascade))
             .field("type", .string, .required)
             .field("value", .string, .required)
             .field("provider", .string)
@@ -17,6 +19,6 @@ struct CreateIdentifierModel: AsyncMigration {
     }
 
     func revert(on database: any Database) async throws {
-        try await database.schema(IdentifierModel.schema).delete()
+        try await database.schema(IdentifierModel<UserModel>.schema).delete()
     }
 }

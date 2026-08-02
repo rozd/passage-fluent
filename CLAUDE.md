@@ -17,41 +17,97 @@ swift package resolve
 
 ## Architecture
 
-This is a Swift package that provides a Fluent (database) implementation of the `Identity.Store` protocol from the companion `vapor-identity` package. It enables persistent storage for user identity management in Vapor applications.
+This is a Swift package that provides a Fluent-backed implementation of the `Passage.Store` protocol for persistent storage in Vapor applications. It supports both **island mode** (manages its own user table) and **overlay mode** (integrates with existing user tables).
 
 ### Core Components
 
-**DatabaseStore** (`Sources/IdentityFluent/DatabaseStore.swift`)
-- Main entry point implementing `Identity.Store`
-- Composes four sub-stores: `UserStore`, `TokenStore`, `CodeStore`, `ResetCodeStore`
-- Automatically registers all migrations on initialization
+**DatabaseStore** (`Sources/PassageFluent/DatabaseStore.swift`)
+- Main entry point implementing `Passage.Store` protocol
+- Composes 8 generic sub-stores from `Sources/PassageFluent/Stores/`
+- Three initialization modes:
+  - **Island mode** `init(app:db:)` — creates its own `users`/`identifiers` tables
+  - **Overlay S1** `init<U>(app:db:userModelType:registerMigrations:)` — inject custom user model
+  - **Overlay S3** `init<U>(app:db:userModelType:userStore:registerMigrations:)` — inject model + custom store
+- Migration registration with explicit control over island/overlay migrations
 
-**Models** (`Sources/IdentityFluent/Model/`)
-- `UserModel` - Core user entity with password hash; conforms to `Identity.User`
-- `IdentifierModel` - Polymorphic user identifiers (email, phone, username) linked to users via parent relationship
-- `RefreshTokenModel` - JWT refresh tokens with rotation/revocation chain tracking
-- `EmailVerificationCodeModel` / `PhoneVerificationCodeModel` - Verification codes with expiration and attempt tracking
-- `EmailResetCodeModel` / `PhoneResetCodeModel` - Password reset codes
-- `PasskeyCredentialModel` - W3C credential record (credential ID, COSE public key, sign count, transports, backup state, AAGUID, attestation format); conforms to `Passage.StoredPasskeyCredential`
-- `PasskeyChallengeModel` - One-shot WebAuthn challenge; stores SHA-256 hash (never plain bytes), TTL, consumption timestamp; `@OptionalParent` user (set during authenticated registration) and `@OptionalField` identifier (set during guest registration before the user exists); conforms to `Passage.StoredPasskeyChallenge`
+**PassageUserModel Protocol** (`Sources/PassageFluent/PassageUserModel.swift`)
+- Protocol for user models to opt into generic store support
+- Hooks: `passageMakeUser` (factory), `passageEagerLoad` (relations), `passageRefresh` (post-save load), `passageDidMarkIdentifierVerified` (verification sync)
+- Constrained defaults for UUID, Int, and String ID types
+- Constraint: `where Id == IDValue` ensures JWT sub/sessionID string round-trip via `passageParseUserID` is coherent
+- Documented conformance requirements: `final class`, `@unchecked Sendable`, `SessionAuthenticatable`, standard `@ID`, no `@CompositeID`
 
-**Migrations** (`Sources/IdentityFluent/Migrations/`)
-- One migration per model, all use `AsyncMigration`
+**Generic Models** (`Sources/PassageFluent/Model/`)
+- All 10 dependent models are generic over `<U: PassageUserModel>`: `RefreshTokenModel<U>`, `IdentifierModel<U>`, `EmailVerificationCodeModel<U>`, `PhoneVerificationCodeModel<U>`, `EmailPasswordResetCodeModel<U>`, `PhonePasswordResetCodeModel<U>`, `ExchangeTokenModel<U>`, `PasskeyCredentialModel<U>`, `MagicLinkTokenModel<U>`, `PasskeyChallengeModel<U>`
+- `IdentifierModel<U>` is public (apps use it for overlay mode with custom Passage.User props)
+- `UserModel` is the built-in island-mode model; conforms to `PassageUserModel` with `passageEagerLoad` loading `identifiers`, and `passageRefresh` loading them post-save
+- `static var schema: String` (computed property required for generic types, not `static let`)
+
+**Generic Sub-Stores** (`Sources/PassageFluent/Stores/`)
+- 8 files, each defining a struct nested in `extension DatabaseStore`:
+  - `UserStore<U>: Passage.UserStore` — user creation, lookup, verification syncing via `passageDidMarkIdentifierVerified` hook
+  - `TokenStore<U>: Passage.TokenStore` — refresh token lifecycle
+  - `VerificationCodeStore<U>: Passage.VerificationCodeStore` — email/phone verification codes
+  - `ResetCodeStore<U>: Passage.RestorationCodeStore` — password reset codes
+  - `MagicLinkTokenStore<U>: Passage.MagicLinkTokenStore` — magic link tokens
+  - `ExchangeTokenStore<U>: Passage.ExchangeTokenStore` — OAuth exchange tokens
+  - `PasskeyCredentialStore<U>: Passage.PasskeyCredentialStore` — W3C credentials
+  - `PasskeyChallengeStore<U>: Passage.PasskeyChallengeStore` — WebAuthn challenges
+- All use `U.passageEagerLoad` at eager-load sites, `passageRefresh` at post-save hydration, `as? U` for downcasts
+
+**Generic Migrations** (`Sources/PassageFluent/Migrations/`)
+- 10 generic migrations + 1 island-only migration (CreateUserModel.swift, left untouched)
+- All generic migrations have explicit `var name: String` pinned to exact legacy strings (`"PassageFluent.CreateXModel"`)
+- **CRITICAL:** Migration names are frozen forever — never change them. Existing databases will re-run migrations if names change.
+- FK definitions use `U.passageUserIDDataType`, `U.schema`, `U.space`, `U.passageUserIDFieldKey`
+- Migration registration matrix:
+  - Island: CreateUserModel + CreateIdentifierModel + 9 dependent
+  - S1: CreateIdentifierModel + 9 dependent (skip CreateUserModel)
+  - S3: 9 dependent only (skip CreateUserModel and CreateIdentifierModel)
 
 ### Key Patterns
 
-- All models use `@unchecked Sendable` for Vapor concurrency
-- Fluent property wrappers: `@ID`, `@Field`, `@OptionalField`, `@Timestamp`, `@Parent`, `@OptionalParent`, `@Children`
-- Type-safe filtering with key paths (e.g., `\.$email == email`)
-- Nested eager loading via `.with(\.$user) { user in user.with(\.$identifiers) }`
-- Token rotation uses `replacedBy` field to track token chain for family revocation
-- Passkey challenges are hashed at the store boundary via `Data.sha256Hex` from the `Passage` package — callers pass raw bytes to one of the three `createPasskeyChallenge` overloads (`from:` for discoverable auth, `for: User, from:` for an authenticated user adding a passkey, `for: Identifier, from:` for guest registration) and to `find(passkeyChallengeMatching:)`, and the column is indexed on the hash
+**Overlay Mode Workflow**
+1. App defines user model conforming to `PassageUserModel` (see example in README)
+2. App registers its own user-table migration BEFORE creating DatabaseStore
+3. App creates `DatabaseStore(app:db:userModelType: MyUser.self)` (S1) or adds custom `userStore:` (S3)
+4. PassageFluent skips the `users` migration (S1) or both `users` and `identifiers` (S3); the generic sub-stores are erased behind the existing `any Passage.XStore` properties, so `Passage.Store` conformance is unchanged
 
-### Optional Passkey Sub-Stores
+**Eager Loading and Post-Save Hydration**
+- `PassageUserModel.passageEagerLoad` called on QueryBuilder at all fetch sites (~13 nested)
+- `passageRefresh(on:)` called post-save to load relations (replaces in-memory `$children.value` priming in island mode)
+- DefaultUserModel overrides both: eager load with `.with(\.$identifiers)`, refresh with `try await self.$identifiers.load(on: db)`
 
-The `Passage.Store` protocol defines `passkeyCredentials` and `passkeyChallenges` with default-nil extensions. `DatabaseStore` overrides both defaults with concrete `PasskeyCredentialStore` / `PasskeyChallengeStore` implementations, so Passage's passkey routes work as soon as a `PasskeyService` is provided. The `passkey_credentials` and `passkey_challenges` migrations register automatically alongside the other tables.
+**Verification Sync Hook**
+- After store marks IdentifierModel rows verified, calls `passageDidMarkIdentifierVerified` on the user model type so models backing `isEmailVerified`/`isPhoneVerified` via own columns can sync
+- AppUser example: set `email_verified = true` and save
+
+**Type-Safe FK Filtering**
+- Generic stores use `\._$id` keypath for ID filtering (public route into FluentKit's ID column)
+- `find(byId:)` uses the user model's `passageParseUserID` to parse String back to native IDValue
+
+### Supported ID Types
+
+**Out-of-box defaults (via constrained `PassageUserModel` extensions):**
+- UUID: `passageParseUserID(_ string: String) -> UUID?` via `UUID(uuidString:)`; `passageUserIDDataType = .uuid`
+- Int: `passageParseUserID(_ string: String) -> Int?` via `Int(_:)`; `passageUserIDDataType = .int`
+- String: `passageParseUserID(_ string: String) -> String?` identity; `passageUserIDDataType = .string`
+
+**Custom types:**
+- Conform to `PassageUserModel` and override `passageParseUserID` and `passageUserIDDataType`
+- Example: custom UUID wrapper, ULID, or Hashids-encoded Int
 
 ### Dependencies
 
-- Requires sibling `vapor-identity` package at `../vapor-identity`
-- Built on Fluent 4.13+ and targets macOS 13+
+- Vapor 4.121+
+- Fluent 4.13+
+- Passage 0.5.12+ (remote dependency: vapor-community/passage)
+- Swift tools 6.3, macOS 13+
+
+### Testing
+
+- `Tests/PassageFluentTests/TestHelpers.swift` — module-level typealiases bind generics to `DefaultUserModel` (including a test-only `typealias UserModel = DefaultUserModel`) so existing tests compile unchanged
+- `Tests/PassageFluentTests/Unit/MigrationNameTests.swift` — verifies all 11 migration names are pinned, guards against re-run on deployed databases
+- `Tests/PassageFluentTests/Overlay/OverlayFixtures.swift` — AppUser fixture (Int ID, stored email_verified) + helper
+- `Tests/PassageFluentTests/Overlay/OverlayStoreIntegrationTests.swift` — S1 mode via Passage.Store APIs (create, find, verify, token lifecycle)
+- `Tests/PassageFluentTests/Overlay/CustomUserStoreIntegrationTests.swift` — S3 mode with custom AppUserStore (no identifiers table)

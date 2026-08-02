@@ -6,6 +6,23 @@ import FluentSQLiteDriver
 @testable import PassageFluent
 @testable import Passage
 
+// MARK: - Module-level Typealiases
+
+// Test-only alias for backward compatibility with existing test code
+typealias UserModel = PassageFluent.DefaultUserModel
+
+// Bind generic models to DefaultUserModel for test compatibility
+typealias IdentifierModel = PassageFluent.IdentifierModel<DefaultUserModel>
+typealias RefreshTokenModel = PassageFluent.RefreshTokenModel<DefaultUserModel>
+typealias EmailVerificationCodeModel = PassageFluent.EmailVerificationCodeModel<DefaultUserModel>
+typealias PhoneVerificationCodeModel = PassageFluent.PhoneVerificationCodeModel<DefaultUserModel>
+typealias EmailPasswordResetCodeModel = PassageFluent.EmailPasswordResetCodeModel<DefaultUserModel>
+typealias PhonePasswordResetCodeModel = PassageFluent.PhonePasswordResetCodeModel<DefaultUserModel>
+typealias ExchangeTokenModel = PassageFluent.ExchangeTokenModel<DefaultUserModel>
+typealias PasskeyCredentialModel = PassageFluent.PasskeyCredentialModel<DefaultUserModel>
+typealias MagicLinkTokenModel = PassageFluent.MagicLinkTokenModel<DefaultUserModel>
+typealias PasskeyChallengeModel = PassageFluent.PasskeyChallengeModel<DefaultUserModel>
+
 // MARK: - Test Application Setup
 
 /// Creates a test application with in-memory SQLite database
@@ -136,7 +153,7 @@ extension RefreshTokenModel {
         revokedAt: Date? = nil,
         replacedBy: UUID? = nil
     ) -> RefreshTokenModel {
-        RefreshTokenModel(
+        PassageFluent.RefreshTokenModel(
             id: id,
             tokenHash: tokenHash,
             userID: userID,
@@ -157,7 +174,7 @@ extension EmailVerificationCodeModel {
         expiresAt: Date = TestFixtures.futureDate,
         failedAttempts: Int = 0
     ) -> EmailVerificationCodeModel {
-        EmailVerificationCodeModel(
+        PassageFluent.EmailVerificationCodeModel(
             id: id,
             email: email,
             codeHash: codeHash,
@@ -178,7 +195,7 @@ extension PhoneVerificationCodeModel {
         expiresAt: Date = TestFixtures.futureDate,
         failedAttempts: Int = 0
     ) -> PhoneVerificationCodeModel {
-        PhoneVerificationCodeModel(
+        PassageFluent.PhoneVerificationCodeModel(
             id: id,
             phone: phone,
             codeHash: codeHash,
@@ -199,7 +216,7 @@ extension EmailPasswordResetCodeModel {
         expiresAt: Date = TestFixtures.futureDate,
         failedAttempts: Int = 0
     ) -> EmailPasswordResetCodeModel {
-        EmailPasswordResetCodeModel(
+        PassageFluent.EmailPasswordResetCodeModel(
             id: id,
             email: email,
             codeHash: codeHash,
@@ -220,7 +237,7 @@ extension PhonePasswordResetCodeModel {
         expiresAt: Date = TestFixtures.futureDate,
         failedAttempts: Int = 0
     ) -> PhonePasswordResetCodeModel {
-        PhonePasswordResetCodeModel(
+        PassageFluent.PhonePasswordResetCodeModel(
             id: id,
             phone: phone,
             codeHash: codeHash,
@@ -240,7 +257,7 @@ extension ExchangeTokenModel {
         expiresAt: Date = TestFixtures.futureDate,
         consumedAt: Date? = nil
     ) -> ExchangeTokenModel {
-        ExchangeTokenModel(
+        PassageFluent.ExchangeTokenModel(
             id: id,
             tokenHash: tokenHash,
             userID: userID,
@@ -316,7 +333,7 @@ extension PasskeyCredentialModel {
         aaguid: String? = "00000000-0000-0000-0000-000000000000",
         attestationFormat: String? = "none"
     ) -> PasskeyCredentialModel {
-        PasskeyCredentialModel(
+        PassageFluent.PasskeyCredentialModel(
             id: id,
             userID: userID,
             credentialID: credentialID,
@@ -343,7 +360,7 @@ extension MagicLinkTokenModel {
         expiresAt: Date = TestFixtures.futureDate,
         failedAttempts: Int = 0
     ) -> MagicLinkTokenModel {
-        MagicLinkTokenModel(
+        PassageFluent.MagicLinkTokenModel(
             id: id,
             email: email,
             tokenHash: tokenHash,
@@ -366,7 +383,7 @@ extension PasskeyChallengeModel {
         expiresAt: Date = TestFixtures.futureDate,
         consumedAt: Date? = nil
     ) -> PasskeyChallengeModel {
-        PasskeyChallengeModel(
+        PassageFluent.PasskeyChallengeModel(
             id: id,
             identifier: identifier,
             userID: userID,
