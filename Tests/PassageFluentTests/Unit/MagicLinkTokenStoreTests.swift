@@ -193,6 +193,6 @@ struct MagicLinkTokenStoreTests {
         defer { Task { try? await shutdownTestApplication(app) } }
 
         let magicLinkStore = store.magicLinkTokens
-        #expect(magicLinkStore is DatabaseStore.MagicLinkTokenStore)
+        #expect(magicLinkStore is DatabaseStore.MagicLinkTokenStore<UserModel>)
     }
 }

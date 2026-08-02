@@ -23,862 +23,129 @@ public struct DatabaseStore: Passage.Store {
 
     public let passkeyChallenges: (any Passage.PasskeyChallengeStore)?
 
+    // MARK: - Public Initializers
+
+    /// Island mode: creates own users table and uses built-in DefaultUserModel
     public init(app: Application, db: any Database) {
+        self.init(
+            app: app,
+            db: db,
+            userModelType: DefaultUserModel.self,
+            customUserStore: nil,
+            includeIdentifiers: true,
+            registerMigrations: true
+        )
+    }
+
+    /// Overlay mode S1: inject custom user model type
+    public init<UserModel: PassageUserModel>(
+        app: Application,
+        db: any Database,
+        userModelType: UserModel.Type,
+        registerMigrations: Bool = true
+    ) {
+        self.init(
+            app: app,
+            db: db,
+            userModelType: userModelType,
+            customUserStore: nil,
+            includeIdentifiers: true,
+            registerMigrations: registerMigrations
+        )
+    }
+
+    /// Overlay mode S3: inject custom user model and custom user store.
+    /// Neither the `users` nor `identifiers` tables/migrations are created;
+    /// `userStore` must return instances of `userModelType`.
+    public init<UserModel: PassageUserModel>(
+        app: Application,
+        db: any Database,
+        userModelType: UserModel.Type,
+        userStore: any Passage.UserStore,
+        registerMigrations: Bool = true
+    ) {
+        self.init(
+            app: app,
+            db: db,
+            userModelType: userModelType,
+            customUserStore: userStore,
+            includeIdentifiers: false,
+            registerMigrations: registerMigrations
+        )
+    }
+
+    private init<UserModel: PassageUserModel>(
+        app: Application,
+        db: any Database,
+        userModelType: UserModel.Type,
+        customUserStore: (any Passage.UserStore)?,
+        includeIdentifiers: Bool,
+        registerMigrations: Bool
+    ) {
         self.db = db
-        self.users = UserStore(db: db)
-        self.tokens = TokenStore(app: app, db: db)
-        self.verificationCodes = VerificationCodeStore(db: db)
-        self.restorationCodes = ResetCodeStore(db: db)
-        self.magicLinkTokens = MagicLinkTokenStore(db: db)
-        self.exchangeTokens = ExchangeTokenStore(db: db)
-        self.passkeyCredentials = PasskeyCredentialStore(db: db)
-        self.passkeyChallenges = PasskeyChallengeStore(db: db)
-        app.migrations.add(CreateUserModel())
-        app.migrations.add(CreateIdentifierModel())
-        app.migrations.add(CreateRefreshTokenModel())
-        app.migrations.add(CreateEmailVerificationCodeModel())
-        app.migrations.add(CreatePhoneVerificationCodeModel())
-        app.migrations.add(CreateEmailResetCodeModel())
-        app.migrations.add(CreatePhoneResetCodeModel())
-        app.migrations.add(CreateExchangeTokenModel())
-        app.migrations.add(CreateMagicLinkTokenModel())
-        app.migrations.add(CreatePasskeyCredentialModel())
-        app.migrations.add(CreatePasskeyChallengeModel())
-    }
-}
-
-extension DatabaseStore {
-
-    struct UserStore: Passage.UserStore {
-        typealias ConcreateUser = UserModel
-
-        let db: any Database
-
-        var userType: UserModel.Type {
-            UserModel.self
+        if let customUserStore {
+            self.users = customUserStore
+        } else {
+            self.users = UserStore<UserModel>(db: db)
         }
+        self.tokens = TokenStore<UserModel>(app: app, db: db)
+        self.verificationCodes = VerificationCodeStore<UserModel>(db: db)
+        self.restorationCodes = ResetCodeStore<UserModel>(db: db)
+        self.magicLinkTokens = MagicLinkTokenStore<UserModel>(db: db)
+        self.exchangeTokens = ExchangeTokenStore<UserModel>(db: db)
+        self.passkeyCredentials = PasskeyCredentialStore<UserModel>(db: db)
+        self.passkeyChallenges = PasskeyChallengeStore<UserModel>(db: db)
 
-        func find(byId id: String) async throws -> (any User)? {
-            guard let uuid = UUID(uuidString: id) else {
-                return nil
-            }
-
-            guard let user = try await UserModel.query(on: db)
-                .filter(\.$id == uuid)
-                .with(\.$identifiers)
-                .first()
-            else {
-                return nil
-            }
-
-            return user
-        }
-
-        func create(identifier: Identifier, with credential: Credential?) async throws -> (any User) {
-            // Build query to check if identifier already exists
-            var existingQuery = IdentifierModel.query(on: db)
-                .filter(\.$type == identifier.kind.rawValue)
-                .filter(\.$value == identifier.value)
-
-            // For federated identifiers, also match on provider
-            if identifier.kind == .federated {
-                existingQuery = existingQuery.filter(\.$provider == identifier.provider?.description)
-            }
-
-            let existing = try await existingQuery.first()
-
-            guard existing == nil else {
-                throw identifier.errorWhenIdentifierAlreadyRegistered
-            }
-
-            return try await db.transaction { db in
-                // Extract password hash from credential if present
-                let passwordHash: String? = if let credential = credential, credential.kind == .password {
-                    credential.secret
-                } else {
-                    nil
-                }
-
-                let user = UserModel(passwordHash: passwordHash)
-                try await user.save(on: db)
-
-                let identifierModel = IdentifierModel(
-                    userID: try user.requireID(),
-                    type: identifier.kind.rawValue,
-                    value: identifier.value,
-                    provider: identifier.provider?.description,
-                    verified: identifier.kind == .federated  // Federated identifiers are pre-verified
-                )
-                try await identifierModel.save(on: db)
-
-                // Reload user with identifiers for proper response
-                user.$identifiers.value = [identifierModel]
-
-                return user
-            }
-        }
-
-        func find(byIdentifier identifier: Identifier) async throws -> (any User)? {
-            var query = IdentifierModel.query(on: db)
-                .filter(\.$type == identifier.kind.rawValue)
-                .filter(\.$value == identifier.value)
-
-            // For federated identifiers, also match on provider
-            if identifier.kind == .federated {
-                query = query.filter(\.$provider == identifier.provider?.description)
-            }
-
-            let existing = try await query
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)  // Nested eager load
-                }
-                .first()
-
-            guard let model = existing else {
-                return nil
-            }
-
-            return model.user
-        }
-
-        func addIdentifier(
-            _ identifier: Identifier,
-            to user: any User,
-            with credential: Credential?
-        ) async throws {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            // Check if identifier already exists
-            var existingQuery = IdentifierModel.query(on: db)
-                .filter(\.$type == identifier.kind.rawValue)
-                .filter(\.$value == identifier.value)
-
-            if identifier.kind == .federated {
-                existingQuery = existingQuery.filter(\.$provider == identifier.provider?.description)
-            }
-
-            let existing = try await existingQuery.first()
-
-            guard existing == nil else {
-                throw identifier.errorWhenIdentifierAlreadyRegistered
-            }
-
-            try await db.transaction { db in
-                // If credential provided, update password hash
-                if let credential = credential, credential.kind == .password {
-                    user.passwordHash = credential.secret
-                    try await user.save(on: db)
-                }
-
-                let identifierModel = IdentifierModel(
-                    userID: try user.requireID(),
-                    type: identifier.kind.rawValue,
-                    value: identifier.value,
-                    provider: identifier.provider?.description,
-                    verified: identifier.kind == .federated
-                )
-                try await identifierModel.save(on: db)
-            }
-        }
-
-        func markEmailVerified(for user: any User) async throws {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            try await IdentifierModel.query(on: db)
-                .filter(\.$user.$id == user.requireID())
-                .filter(\.$type == Identifier.Kind.email.rawValue)
-                .set(\.$verified, to: true)
-                .update()
-        }
-
-        func markPhoneVerified(for user: any User) async throws {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            try await IdentifierModel.query(on: db)
-                .filter(\.$user.$id == user.requireID())
-                .filter(\.$type == Identifier.Kind.phone.rawValue)
-                .set(\.$verified, to: true)
-                .update()
-        }
-
-        func setPassword(for user: any User, passwordHash: String) async throws {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            user.passwordHash = passwordHash
-            try await user.save(on: db)
-        }
-
-        func createWithEmail(_ email: String, verified: Bool) async throws -> any User {
-            throw PassageError.unexpected(message: "Not implemented yet")
-        }
-
-        func createWithPhone(_ phone: String, verified: Bool) async throws -> any User {
-            throw PassageError.unexpected(message: "Not implemented yet")
-        }
-
-
-    }
-
-}
-
-// MARK: - TokenStore
-
-extension DatabaseStore {
-
-    struct TokenStore: Passage.TokenStore {
-
-        let app: Application
-        let db: any Database
-
-        func createRefreshToken(
-            for user: any User,
-            tokenHash hash: String,
-            expiresAt: Date,
-        ) async throws -> any RefreshToken {
-            return try await self.createRefreshToken(
-                for: user,
-                tokenHash: hash,
-                expiresAt: expiresAt,
-                replacing: nil,
-            )
-        }
-
-        func createRefreshToken(
-            for user: any User,
-            tokenHash hash: String,
-            expiresAt: Date,
-            replacing tokenToReplace: (any RefreshToken)?,
-        ) async throws -> any RefreshToken {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-            return try await db.transaction { db in
-                let newRefreshToken = RefreshTokenModel(
-                    tokenHash: hash,
-                    userID: try user.requireID(),
-                    expiresAt: expiresAt
-                )
-
-                try await newRefreshToken.save(on: db)
-
-                guard let tokenToReplace = tokenToReplace else {
-                    return newRefreshToken
-                }
-
-                guard let oldRefreshToken = tokenToReplace as? RefreshTokenModel else {
-                    throw PassageError.unexpected(message: "Unexpected token type: \(type(of: tokenToReplace))")
-                }
-
-                oldRefreshToken.revokedAt = .now
-                oldRefreshToken.replacedBy = newRefreshToken.id
-
-                try await oldRefreshToken.save(on: db)
-
-                return newRefreshToken
-            }
-        }
-
-        func find(refreshTokenHash hash: String) async throws -> (any RefreshToken)? {
-            return try await RefreshTokenModel.query(on: db)
-                .filter(\.$tokenHash == hash)
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)
-                }
-                .first()
-        }
-
-        func revokeRefreshToken(for user: any User) async throws {
-            guard let userId = user.id else {
-                throw PassageError.unexpected(message: "User ID is missing")
-            }
-
-            guard let userUUID = userId as? UUID else {
-                throw PassageError.unexpected(message: "User ID must be UUID")
-            }
-
-            try await RefreshTokenModel.query(on: db)
-                .filter(\.$user.$id == userUUID)
-                .filter(\.$revokedAt == nil)
-                .set(\.$revokedAt, to: .now)
-                .update()
-        }
-
-        func revokeRefreshToken(withHash hash: String) async throws {
-            guard let existingToken = try await RefreshTokenModel.query(on: db)
-                .filter(\.$tokenHash == hash)
-                .first()
-            else {
-                return // Token not found, nothing to revoke
-            }
-
-            existingToken.revokedAt = .now
-            try await existingToken.save(on: db)
-        }
-
-        func revoke(refreshTokenFamilyStartingFrom token: any RefreshToken) async throws {
-            guard let token = token as? RefreshTokenModel else {
-                throw PassageError.unexpected(message: "Unexpected token type: \(type(of: token))")
-            }
-
-            try await db.transaction { db in
-                var currentTokenId = token.id
-
-                while let tokenId = currentTokenId {
-                    guard let nextToken = try await RefreshTokenModel.find(tokenId, on: db) else {
-                        break
-                    }
-
-                    if nextToken.revokedAt == nil {
-                        nextToken.revokedAt = .now
-                        try await nextToken.save(on: db)
-                    }
-
-                    currentTokenId = nextToken.replacedBy
-                }
-            }
-
+        if registerMigrations {
+            Self.registerMigrations(for: UserModel.self, on: app, includeIdentifiers: includeIdentifiers)
         }
     }
-}
 
-// MARK: - CodeStore
+    // MARK: - Migration Management
 
-extension DatabaseStore {
-
-    struct VerificationCodeStore: Passage.VerificationCodeStore {
-
-        let db: any Database
-
-        // MARK: - Email Codes
-
-        func createEmailCode(
-            for user: any User,
-            email: String,
-            codeHash: String,
-            expiresAt: Date
-        ) async throws -> any EmailVerificationCode {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            let code = EmailVerificationCodeModel(
-                email: email,
-                codeHash: codeHash,
-                userID: try user.requireID(),
-                expiresAt: expiresAt
-            )
-            try await code.save(on: db)
-            return code
-        }
-
-        func findEmailCode(
-            forEmail email: String,
-            codeHash: String
-        ) async throws -> (any EmailVerificationCode)? {
-            try await EmailVerificationCodeModel.query(on: db)
-                .filter(\.$email == email)
-                .filter(\.$codeHash == codeHash)
-                .filter(\.$invalidatedAt == nil)
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)
-                }
-                .first()
-        }
-
-        func invalidateEmailCodes(forEmail email: String) async throws {
-            try await EmailVerificationCodeModel.query(on: db)
-                .filter(\.$email == email)
-                .filter(\.$invalidatedAt == nil)
-                .set(\.$invalidatedAt, to: .now)
-                .update()
-        }
-
-        func incrementFailedAttempts(for code: any EmailVerificationCode) async throws {
-            guard let code = code as? EmailVerificationCodeModel else {
-                throw PassageError.unexpected(message: "Unexpected code type: \(type(of: code))")
-            }
-            code.failedAttempts += 1
-            try await code.save(on: db)
-        }
-
-        // MARK: - Phone Codes
-
-        func createPhoneCode(
-            for user: any User,
-            phone: String,
-            codeHash: String,
-            expiresAt: Date
-        ) async throws -> any PhoneVerificationCode {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            let code = PhoneVerificationCodeModel(
-                phone: phone,
-                codeHash: codeHash,
-                userID: try user.requireID(),
-                expiresAt: expiresAt
-            )
-            try await code.save(on: db)
-            return code
-        }
-
-        func findPhoneCode(
-            forPhone phone: String,
-            codeHash: String
-        ) async throws -> (any PhoneVerificationCode)? {
-            try await PhoneVerificationCodeModel.query(on: db)
-                .filter(\.$phone == phone)
-                .filter(\.$codeHash == codeHash)
-                .filter(\.$invalidatedAt == nil)
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)
-                }
-                .first()
-        }
-
-        func invalidatePhoneCodes(forPhone phone: String) async throws {
-            try await PhoneVerificationCodeModel.query(on: db)
-                .filter(\.$phone == phone)
-                .filter(\.$invalidatedAt == nil)
-                .set(\.$invalidatedAt, to: .now)
-                .update()
-        }
-
-        func incrementFailedAttempts(for code: any PhoneVerificationCode) async throws {
-            guard let code = code as? PhoneVerificationCodeModel else {
-                throw PassageError.unexpected(message: "Unexpected code type: \(type(of: code))")
-            }
-            code.failedAttempts += 1
-            try await code.save(on: db)
+    private static func registerMigrations<UserModel: PassageUserModel>(
+        for userModelType: UserModel.Type,
+        on app: Application,
+        includeIdentifiers: Bool
+    ) {
+        let isIslandMode = UserModel.self is DefaultUserModel.Type
+        let migrations = Self.migrations(for: UserModel.self, includeIdentifiers: includeIdentifiers, isIslandMode: isIslandMode)
+        for migration in migrations {
+            app.migrations.add(migration)
         }
     }
-}
 
-// MARK: - ResetCodeStore
+    /// Returns all migrations for the given user model type.
+    /// - Parameter includeIdentifiers: Include the IdentifierModel migration (S1 overlay only; S3 skips it).
+    /// - Parameter isIslandMode: Include the DefaultUserModel migration (island mode only).
+    public static func migrations<UserModel: PassageUserModel>(
+        for userModelType: UserModel.Type,
+        includeIdentifiers: Bool = true,
+        isIslandMode: Bool = false
+    ) -> [AsyncMigration] {
+        var migrations: [AsyncMigration] = []
 
-extension DatabaseStore {
-
-    struct ResetCodeStore: Passage.RestorationCodeStore {
-
-        let db: any Database
-
-        // MARK: - Email Reset Codes
-
-        func createPasswordResetCode(
-            for user: any User,
-            email: String,
-            codeHash: String,
-            expiresAt: Date
-        ) async throws -> any EmailPasswordResetCode {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            let code = EmailPasswordResetCodeModel(
-                email: email,
-                codeHash: codeHash,
-                userID: try user.requireID(),
-                expiresAt: expiresAt
-            )
-            try await code.save(on: db)
-            return code
+        // Island mode only
+        if isIslandMode {
+            migrations.append(CreateUserModel())
         }
 
-        func findPasswordResetCode(
-            forEmail email: String,
-            codeHash: String
-        ) async throws -> (any EmailPasswordResetCode)? {
-            try await EmailPasswordResetCodeModel.query(on: db)
-                .filter(\.$email == email)
-                .filter(\.$codeHash == codeHash)
-                .filter(\.$invalidatedAt == nil)
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)
-                }
-                .first()
+        // S1 overlay (includeIdentifiers) only; S3 skips
+        if includeIdentifiers {
+            migrations.append(CreateIdentifierModel<UserModel>())
         }
 
-        func invalidatePasswordResetCodes(forEmail email: String) async throws {
-            try await EmailPasswordResetCodeModel.query(on: db)
-                .filter(\.$email == email)
-                .filter(\.$invalidatedAt == nil)
-                .set(\.$invalidatedAt, to: .now)
-                .update()
-        }
+        // All modes register these 9 dependent migrations
+        migrations.append(CreateRefreshTokenModel<UserModel>())
+        migrations.append(CreateEmailVerificationCodeModel<UserModel>())
+        migrations.append(CreatePhoneVerificationCodeModel<UserModel>())
+        migrations.append(CreateEmailResetCodeModel<UserModel>())
+        migrations.append(CreatePhoneResetCodeModel<UserModel>())
+        migrations.append(CreateExchangeTokenModel<UserModel>())
+        migrations.append(CreateMagicLinkTokenModel<UserModel>())
+        migrations.append(CreatePasskeyCredentialModel<UserModel>())
+        migrations.append(CreatePasskeyChallengeModel<UserModel>())
 
-        func incrementFailedAttempts(for code: any EmailPasswordResetCode) async throws {
-            guard let code = code as? EmailPasswordResetCodeModel else {
-                throw PassageError.unexpected(message: "Unexpected code type: \(type(of: code))")
-            }
-            code.failedAttempts += 1
-            try await code.save(on: db)
-        }
-
-        // MARK: - Phone Reset Codes
-
-        func createPasswordResetCode(
-            for user: any User,
-            phone: String,
-            codeHash: String,
-            expiresAt: Date
-        ) async throws -> any PhonePasswordResetCode {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            let code = PhonePasswordResetCodeModel(
-                phone: phone,
-                codeHash: codeHash,
-                userID: try user.requireID(),
-                expiresAt: expiresAt
-            )
-            try await code.save(on: db)
-            return code
-        }
-
-        func findPasswordResetCode(
-            forPhone phone: String,
-            codeHash: String
-        ) async throws -> (any PhonePasswordResetCode)? {
-            try await PhonePasswordResetCodeModel.query(on: db)
-                .filter(\.$phone == phone)
-                .filter(\.$codeHash == codeHash)
-                .filter(\.$invalidatedAt == nil)
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)
-                }
-                .first()
-        }
-
-        func invalidatePasswordResetCodes(forPhone phone: String) async throws {
-            try await PhonePasswordResetCodeModel.query(on: db)
-                .filter(\.$phone == phone)
-                .filter(\.$invalidatedAt == nil)
-                .set(\.$invalidatedAt, to: .now)
-                .update()
-        }
-
-        func incrementFailedAttempts(for code: any PhonePasswordResetCode) async throws {
-            guard let code = code as? PhonePasswordResetCodeModel else {
-                throw PassageError.unexpected(message: "Unexpected code type: \(type(of: code))")
-            }
-            code.failedAttempts += 1
-            try await code.save(on: db)
-        }
-    }
-}
-
-// MARK: - MagicLinkTokenStore
-
-extension DatabaseStore {
-
-    struct MagicLinkTokenStore: Passage.MagicLinkTokenStore {
-
-        let db: any Database
-
-        func createEmailMagicLink(
-            for user: (any User)?,
-            identifier: Identifier,
-            tokenHash: String,
-            sessionTokenHash: String?,
-            expiresAt: Date,
-        ) async throws -> any MagicLinkToken {
-            guard identifier.kind == .email else {
-                throw PassageError.unexpected(message: "Expected email identifier, got \(identifier.kind)")
-            }
-
-            let userID: UUID?
-            if let user = user {
-                guard let userModel = user as? UserModel else {
-                    throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-                }
-                userID = try userModel.requireID()
-            } else {
-                userID = nil
-            }
-
-            let model = MagicLinkTokenModel(
-                email: identifier.value,
-                tokenHash: tokenHash,
-                userID: userID,
-                sessionTokenHash: sessionTokenHash,
-                expiresAt: expiresAt
-            )
-            try await model.save(on: db)
-
-            if userID != nil {
-                try await model.$user.load(on: db)
-                try await model.user?.$identifiers.load(on: db)
-            }
-
-            return model
-        }
-
-        func findEmailMagicLink(tokenHash: String) async throws -> (any MagicLinkToken)? {
-            try await MagicLinkTokenModel.query(on: db)
-                .filter(\.$tokenHash == tokenHash)
-                .filter(\.$invalidatedAt == nil)
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)
-                }
-                .first()
-        }
-
-        func invalidateEmailMagicLinks(for identifier: Identifier) async throws {
-            guard identifier.kind == .email else {
-                throw PassageError.unexpected(message: "Expected email identifier, got \(identifier.kind)")
-            }
-            try await MagicLinkTokenModel.query(on: db)
-                .filter(\.$email == identifier.value)
-                .filter(\.$invalidatedAt == nil)
-                .set(\.$invalidatedAt, to: .now)
-                .update()
-        }
-
-        func incrementFailedAttempts(for magicLink: any MagicLinkToken) async throws {
-            guard let model = magicLink as? MagicLinkTokenModel else {
-                throw PassageError.unexpected(message: "Unexpected magic link type: \(type(of: magicLink))")
-            }
-            model.failedAttempts += 1
-            try await model.save(on: db)
-        }
-
-    }
-}
-
-// MARK: - ExchangeTokenStore
-
-extension DatabaseStore {
-
-    struct ExchangeTokenStore: Passage.ExchangeTokenStore {
-
-        let db: any Database
-
-        func createExchangeToken(
-            for user: any User,
-            tokenHash: String,
-            expiresAt: Date
-        ) async throws -> any ExchangeToken {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            return try await db.transaction { db in
-                let token = ExchangeTokenModel(
-                    tokenHash: tokenHash,
-                    userID: try user.requireID(),
-                    expiresAt: expiresAt
-                )
-                try await token.save(on: db)
-
-                // Eager load user for return
-                try await token.$user.load(on: db)
-                try await token.user.$identifiers.load(on: db)
-
-                return token
-            }
-        }
-
-        func find(exchangeTokenHash hash: String) async throws -> (any ExchangeToken)? {
-            try await ExchangeTokenModel.query(on: db)
-                .filter(\.$tokenHash == hash)
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)
-                }
-                .first()
-        }
-
-        func consume(exchangeToken: any ExchangeToken) async throws {
-            guard let model = exchangeToken as? ExchangeTokenModel else {
-                throw PassageError.unexpected(message: "Unexpected token type: \(type(of: exchangeToken))")
-            }
-
-            model.consumedAt = Date()
-            try await model.save(on: db)
-        }
-
-        func cleanupExpiredTokens(before date: Date) async throws {
-            try await ExchangeTokenModel.query(on: db)
-                .filter(\.$expiresAt < date)
-                .delete()
-        }
-    }
-}
-
-// MARK: - PasskeyCredentialStore
-
-extension DatabaseStore {
-
-    struct PasskeyCredentialStore: Passage.PasskeyCredentialStore {
-
-        let db: any Database
-
-        func createPasskeyCredential(
-            for user: any User,
-            from credential: PasskeyCredential
-        ) async throws -> any StoredPasskeyCredential {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            return try await db.transaction { db in
-                let model = PasskeyCredentialModel(
-                    userID: try user.requireID(),
-                    credentialID: credential.credentialID,
-                    publicKey: credential.publicKey,
-                    signCount: credential.signCount,
-                    uvInitialized: credential.uvInitialized,
-                    transports: credential.transports,
-                    backupEligible: credential.backupEligible,
-                    isBackedUp: credential.isBackedUp,
-                    aaguid: credential.aaguid,
-                    attestationFormat: credential.attestationFormat
-                )
-                try await model.save(on: db)
-
-                try await model.$user.load(on: db)
-                try await model.user.$identifiers.load(on: db)
-
-                return model
-            }
-        }
-
-        func find(byCredentialID credentialID: String) async throws -> (any StoredPasskeyCredential)? {
-            try await PasskeyCredentialModel.query(on: db)
-                .filter(\.$credentialID == credentialID)
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)
-                }
-                .first()
-        }
-
-        func listPasskeyCredentials(forUser user: any User) async throws -> [any StoredPasskeyCredential] {
-            guard let user = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            return try await PasskeyCredentialModel.query(on: db)
-                .filter(\.$user.$id == user.requireID())
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)
-                }
-                .all()
-        }
-
-        func updatePasskeyCredentialAfterAuthentication(
-            forCredentialID credentialID: String,
-            newSignCount: UInt32,
-            isBackedUp: Bool
-        ) async throws {
-            guard let model = try await PasskeyCredentialModel.query(on: db)
-                .filter(\.$credentialID == credentialID)
-                .first()
-            else {
-                return
-            }
-
-            model.signCount = newSignCount
-            model.isBackedUp = isBackedUp
-            try await model.save(on: db)
-        }
-
-        func deletePasskeyCredential(byCredentialID credentialID: String) async throws {
-            try await PasskeyCredentialModel.query(on: db)
-                .filter(\.$credentialID == credentialID)
-                .delete()
-        }
-    }
-}
-
-// MARK: - PasskeyChallengeStore
-
-extension DatabaseStore {
-
-    struct PasskeyChallengeStore: Passage.PasskeyChallengeStore {
-
-        let db: any Database
-
-        func createPasskeyChallenge(
-            from challenge: PasskeyChallenge
-        ) async throws -> any StoredPasskeyChallenge {
-            let model = PasskeyChallengeModel(
-                userID: nil,
-                kind: challenge.kind,
-                challengeHash: challenge.bytes.sha256Hex,
-                expiresAt: challenge.expiresAt
-            )
-            try await model.save(on: db)
-            return model
-        }
-
-        func createPasskeyChallenge(
-            for user: any User,
-            from challenge: PasskeyChallenge
-        ) async throws -> any StoredPasskeyChallenge {
-            guard let userModel = user as? UserModel else {
-                throw PassageError.unexpected(message: "Unexpected user type: \(type(of: user))")
-            }
-
-            let model = PasskeyChallengeModel(
-                userID: try userModel.requireID(),
-                kind: challenge.kind,
-                challengeHash: challenge.bytes.sha256Hex,
-                expiresAt: challenge.expiresAt
-            )
-            try await model.save(on: db)
-
-            try await model.$user.load(on: db)
-            try await model.user?.$identifiers.load(on: db)
-
-            return model
-        }
-
-        func createPasskeyChallenge(
-            for identifier: Identifier,
-            from challenge: PasskeyChallenge
-        ) async throws -> any StoredPasskeyChallenge {
-            let model = PasskeyChallengeModel(
-                identifier: identifier,
-                userID: nil,
-                kind: challenge.kind,
-                challengeHash: challenge.bytes.sha256Hex,
-                expiresAt: challenge.expiresAt
-            )
-            try await model.save(on: db)
-            return model
-        }
-
-        func find(passkeyChallengeMatching bytes: Data) async throws -> (any StoredPasskeyChallenge)? {
-            try await PasskeyChallengeModel.query(on: db)
-                .filter(\.$challengeHash == bytes.sha256Hex)
-                .with(\.$user) { user in
-                    user.with(\.$identifiers)
-                }
-                .first()
-        }
-
-        func consume(passkeyChallenge: any StoredPasskeyChallenge) async throws {
-            guard let model = passkeyChallenge as? PasskeyChallengeModel else {
-                throw PassageError.unexpected(message: "Unexpected challenge type: \(type(of: passkeyChallenge))")
-            }
-
-            model.consumedAt = .now
-            try await model.save(on: db)
-        }
-
-        func cleanupExpiredPasskeyChallenges(before date: Date) async throws {
-            try await PasskeyChallengeModel.query(on: db)
-                .filter(\.$expiresAt < date)
-                .delete()
-        }
+        return migrations
     }
 }

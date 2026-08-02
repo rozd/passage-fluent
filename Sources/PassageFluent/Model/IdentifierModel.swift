@@ -1,33 +1,33 @@
 import Foundation
 import Fluent
 
-final class IdentifierModel: Model, @unchecked Sendable {
-    static let schema = "identifiers"
+public final class IdentifierModel<UserModel: PassageUserModel>: Model, @unchecked Sendable {
+    public static var schema: String { "identifiers" }
 
     @ID(key: .id)
-    var id: UUID?
+    public var id: UUID?
 
     @Parent(key: "user_id")
-    var user: UserModel
+    public var user: UserModel
 
     @Field(key: "type")
-    var type: String
+    public var type: String
 
     @Field(key: "value")
-    var value: String
+    public var value: String
 
     @OptionalField(key: "provider")
-    var provider: String?
+    public var provider: String?
 
     @Field(key: "verified")
-    var verified: Bool
+    public var verified: Bool
 
     @Timestamp(key: "created_at", on: .create)
-    var createdAt: Date?
+    public var createdAt: Date?
 
-    init() {}
+    public init() {}
 
-    init(id: UUID? = nil, userID: UUID, type: String, value: String, provider: String? = nil, verified: Bool = false) {
+    public init(id: UUID? = nil, userID: UserModel.IDValue, type: String, value: String, provider: String? = nil, verified: Bool = false) {
         self.id = id
         self.$user.id = userID
         self.type = type

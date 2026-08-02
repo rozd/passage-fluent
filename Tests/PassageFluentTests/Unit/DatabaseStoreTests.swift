@@ -18,14 +18,14 @@ struct DatabaseStoreTests {
 
         let store = DatabaseStore(app: app, db: app.db)
 
-        #expect(store.users is DatabaseStore.UserStore)
-        #expect(store.tokens is DatabaseStore.TokenStore)
-        #expect(store.verificationCodes is DatabaseStore.VerificationCodeStore)
-        #expect(store.restorationCodes is DatabaseStore.ResetCodeStore)
-        #expect(store.magicLinkTokens is DatabaseStore.MagicLinkTokenStore)
-        #expect(store.exchangeTokens is DatabaseStore.ExchangeTokenStore)
-        #expect(store.passkeyCredentials is DatabaseStore.PasskeyCredentialStore)
-        #expect(store.passkeyChallenges is DatabaseStore.PasskeyChallengeStore)
+        #expect(store.users is DatabaseStore.UserStore<UserModel>)
+        #expect(store.tokens is DatabaseStore.TokenStore<UserModel>)
+        #expect(store.verificationCodes is DatabaseStore.VerificationCodeStore<UserModel>)
+        #expect(store.restorationCodes is DatabaseStore.ResetCodeStore<UserModel>)
+        #expect(store.magicLinkTokens is DatabaseStore.MagicLinkTokenStore<UserModel>)
+        #expect(store.exchangeTokens is DatabaseStore.ExchangeTokenStore<UserModel>)
+        #expect(store.passkeyCredentials is DatabaseStore.PasskeyCredentialStore<UserModel>)
+        #expect(store.passkeyChallenges is DatabaseStore.PasskeyChallengeStore<UserModel>)
     }
 
     @Test("DatabaseStore registers all migrations")

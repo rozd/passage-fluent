@@ -2,8 +2,8 @@ import Foundation
 import Passage
 import Fluent
 
-final class ExchangeTokenModel: Model, @unchecked Sendable {
-    static let schema = "exchange_tokens"
+final class ExchangeTokenModel<UserModel: PassageUserModel>: Model, @unchecked Sendable {
+    static var schema: String { "exchange_tokens" }
 
     @ID(key: .id)
     var id: UUID?
@@ -28,7 +28,7 @@ final class ExchangeTokenModel: Model, @unchecked Sendable {
     init(
         id: UUID? = nil,
         tokenHash: String,
-        userID: UUID,
+        userID: UserModel.IDValue,
         expiresAt: Date,
         consumedAt: Date? = nil
     ) {
