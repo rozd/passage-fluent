@@ -358,25 +358,101 @@ struct UserStoreTests {
         #expect(foundUser?.passwordHash == "newpasswordhash")
     }
 
-    // MARK: - Unimplemented Methods Tests
+    // MARK: - createWithEmail and createWithPhone Tests
 
-    @Test("createWithEmail throws not implemented error")
-    func testCreateWithEmailNotImplemented() async throws {
+    @Test("createWithEmail creates unverified user")
+    func testCreateWithEmailUnverified() async throws {
         let (app, store) = try await createTestApplicationWithStore()
         defer { Task { try? await shutdownTestApplication(app) } }
 
-        await #expect(throws: PassageError.self) {
-            _ = try await store.users.createWithEmail("test@example.com", verified: false)
+        let email = "unverified@example.com"
+        let user = try await store.users.createWithEmail(email, verified: false)
+
+        #expect(user.email == email)
+        #expect(user.isEmailVerified == false)
+        #expect(user.passwordHash == nil)
+        #expect(user.isAnonymous == false)
+
+        let found = try await store.users.find(byIdentifier: .email(email))
+        #expect(found?.email == email)
+        #expect(found?.isEmailVerified == false)
+    }
+
+    @Test("createWithEmail creates verified user")
+    func testCreateWithEmailVerified() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let email = "verified@example.com"
+        let user = try await store.users.createWithEmail(email, verified: true)
+
+        #expect(user.email == email)
+        #expect(user.isEmailVerified == true)
+        #expect(user.passwordHash == nil)
+
+        let found = try await store.users.find(byIdentifier: .email(email))
+        #expect(found?.email == email)
+        #expect(found?.isEmailVerified == true)
+    }
+
+    @Test("createWithEmail throws error when email already exists")
+    func testCreateWithEmailDuplicateThrows() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let email = "duplicate@example.com"
+        _ = try await store.users.createWithEmail(email, verified: false)
+
+        await #expect(throws: AuthenticationError.self) {
+            _ = try await store.users.createWithEmail(email, verified: false)
         }
     }
 
-    @Test("createWithPhone throws not implemented error")
-    func testCreateWithPhoneNotImplemented() async throws {
+    @Test("createWithPhone creates unverified user")
+    func testCreateWithPhoneUnverified() async throws {
         let (app, store) = try await createTestApplicationWithStore()
         defer { Task { try? await shutdownTestApplication(app) } }
 
-        await #expect(throws: PassageError.self) {
-            _ = try await store.users.createWithPhone("+1234567890", verified: false)
+        let phone = "+1234567890"
+        let user = try await store.users.createWithPhone(phone, verified: false)
+
+        #expect(user.phone == phone)
+        #expect(user.isPhoneVerified == false)
+        #expect(user.passwordHash == nil)
+        #expect(user.isAnonymous == false)
+
+        let found = try await store.users.find(byIdentifier: .phone(phone))
+        #expect(found?.phone == phone)
+        #expect(found?.isPhoneVerified == false)
+    }
+
+    @Test("createWithPhone creates verified user")
+    func testCreateWithPhoneVerified() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let phone = "+1987654321"
+        let user = try await store.users.createWithPhone(phone, verified: true)
+
+        #expect(user.phone == phone)
+        #expect(user.isPhoneVerified == true)
+        #expect(user.passwordHash == nil)
+
+        let found = try await store.users.find(byIdentifier: .phone(phone))
+        #expect(found?.phone == phone)
+        #expect(found?.isPhoneVerified == true)
+    }
+
+    @Test("createWithPhone throws error when phone already exists")
+    func testCreateWithPhoneDuplicateThrows() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let phone = "+1234567890"
+        _ = try await store.users.createWithPhone(phone, verified: false)
+
+        await #expect(throws: AuthenticationError.self) {
+            _ = try await store.users.createWithPhone(phone, verified: false)
         }
     }
 }

@@ -277,4 +277,64 @@ struct UserWorkflowIntegrationTests {
         )
         #expect(finalCode?.isValid(maxAttempts: 5) == false)
     }
+
+    // MARK: - Passwordless User Creation Flow
+
+    @Test("Passwordless user creation flow with email (pre-verified and unverified)")
+    func testPasswordlessEmailCreationFlow() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        // 1. Create pre-verified user (e.g. from magic link flow)
+        let verifiedEmail = "magic@example.com"
+        let verifiedUser = try await store.users.createWithEmail(verifiedEmail, verified: true)
+
+        #expect(verifiedUser.email == verifiedEmail)
+        #expect(verifiedUser.isEmailVerified == true)
+        #expect(verifiedUser.passwordHash == nil)
+
+        let foundVerified = try await store.users.find(byIdentifier: .email(verifiedEmail))
+        #expect(foundVerified?.isEmailVerified == true)
+
+        // 2. Create unverified user
+        let unverifiedEmail = "pending@example.com"
+        let unverifiedUser = try await store.users.createWithEmail(unverifiedEmail, verified: false)
+
+        #expect(unverifiedUser.email == unverifiedEmail)
+        #expect(unverifiedUser.isEmailVerified == false)
+
+        // 3. Mark unverified user verified later
+        try await store.users.markEmailVerified(for: unverifiedUser)
+        let nowVerified = try await store.users.find(byIdentifier: .email(unverifiedEmail))
+        #expect(nowVerified?.isEmailVerified == true)
+    }
+
+    @Test("Passwordless user creation flow with phone (pre-verified and unverified)")
+    func testPasswordlessPhoneCreationFlow() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        // 1. Create pre-verified user (e.g. from SMS OTP login flow)
+        let verifiedPhone = "+15551234567"
+        let verifiedUser = try await store.users.createWithPhone(verifiedPhone, verified: true)
+
+        #expect(verifiedPhone == verifiedUser.phone)
+        #expect(verifiedUser.isPhoneVerified == true)
+        #expect(verifiedUser.passwordHash == nil)
+
+        let foundVerified = try await store.users.find(byIdentifier: .phone(verifiedPhone))
+        #expect(foundVerified?.isPhoneVerified == true)
+
+        // 2. Create unverified user
+        let unverifiedPhone = "+15559876543"
+        let unverifiedUser = try await store.users.createWithPhone(unverifiedPhone, verified: false)
+
+        #expect(unverifiedUser.phone == unverifiedPhone)
+        #expect(unverifiedUser.isPhoneVerified == false)
+
+        // 3. Mark unverified user verified later
+        try await store.users.markPhoneVerified(for: unverifiedUser)
+        let nowVerified = try await store.users.find(byIdentifier: .phone(unverifiedPhone))
+        #expect(nowVerified?.isPhoneVerified == true)
+    }
 }

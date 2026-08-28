@@ -151,6 +151,7 @@ extension DatabaseStore {
                 .update()
 
             try await UserModel.passageDidMarkIdentifierVerified(.email, for: user, on: db)
+            try await user.passageRefresh(on: db)
         }
 
         func markPhoneVerified(for user: any User) async throws {
@@ -165,6 +166,7 @@ extension DatabaseStore {
                 .update()
 
             try await UserModel.passageDidMarkIdentifierVerified(.phone, for: user, on: db)
+            try await user.passageRefresh(on: db)
         }
 
         func setPassword(for user: any User, passwordHash: String) async throws {
@@ -177,11 +179,19 @@ extension DatabaseStore {
         }
 
         func createWithEmail(_ email: String, verified: Bool) async throws -> any User {
-            throw PassageError.unexpected(message: "Not implemented yet")
+            let user = try await self.create(identifier: .email(email), with: nil)
+            if verified {
+                try await self.markEmailVerified(for: user)
+            }
+            return user
         }
 
         func createWithPhone(_ phone: String, verified: Bool) async throws -> any User {
-            throw PassageError.unexpected(message: "Not implemented yet")
+            let user = try await self.create(identifier: .phone(phone), with: nil)
+            if verified {
+                try await self.markPhoneVerified(for: user)
+            }
+            return user
         }
     }
 

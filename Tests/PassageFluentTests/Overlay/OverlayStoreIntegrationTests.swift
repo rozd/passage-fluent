@@ -236,6 +236,28 @@ struct OverlayStoreIntegrationTests {
         #expect(found != nil)
     }
 
+    @Test("createWithEmail in overlay mode")
+    func testCreateWithEmailInOverlayMode() async throws {
+        let app = try await createTestApplicationForOverlay()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let store = DatabaseStore(
+            app: app,
+            db: app.db,
+            userModelType: AppUser.self
+        )
+        try await app.autoMigrate()
+
+        let user = try await store.users.createWithEmail("overlay-user@example.com", verified: true)
+        #expect(user.email == "overlay-user@example.com")
+        #expect(user.isEmailVerified == true)
+
+        let found = try await store.users.find(byIdentifier: .email("overlay-user@example.com"))
+        #expect(found?.email == "overlay-user@example.com")
+        #expect(found?.isEmailVerified == true)
+        #expect((found as? AppUser)?.emailVerified == true)
+    }
+
     @Test("No 'users' table exists; migrations correct")
     func testNoUsersTableAndCorrectMigrations() async throws {
         let app = try await createTestApplicationForOverlay()
