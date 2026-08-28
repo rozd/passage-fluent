@@ -1,5 +1,5 @@
 {
-  "originHash" : "4aaa7e358b65a89f33c376449b5a713484291b215f0dfd4db08662d55c9783cd",
+  "originHash" : "0ef7d7f3ea6419c54a0fc7bc6166622d8af6ffd10e292cf89c01d369d3605d46",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -161,15 +161,6 @@
       "state" : {
         "revision" : "87e50f483c54e6efd60e885f7f5aa946cee68023",
         "version" : "1.2.1"
-      }
-    },
-    {
-      "identity" : "swift-argument-parser",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-argument-parser.git",
-      "state" : {
-        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
-        "version" : "1.8.2"
       }
     },
     {
@@ -353,30 +344,12 @@
       }
     },
     {
-      "identity" : "swift-syntax",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swiftlang/swift-syntax.git",
-      "state" : {
-        "revision" : "a8b1c535647243d603b6772e7e8306c993a0c188",
-        "version" : "605.0.0-prerelease-2026-06-26"
-      }
-    },
-    {
       "identity" : "swift-system",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-system.git",
       "state" : {
         "revision" : "869129b7bf4ecc57b97d0193ad29690ca2134750",
         "version" : "1.8.1"
-      }
-    },
-    {
-      "identity" : "swift-testing",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-testing.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "d33f43948972b6780739db2ed172f503bddd81c3"
       }
     },
     {

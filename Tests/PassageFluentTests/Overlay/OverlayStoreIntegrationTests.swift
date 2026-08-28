@@ -66,7 +66,7 @@ struct OverlayStoreIntegrationTests {
 
         let user = try await store.users.create(identifier: .email("test@example.com"), with: nil)
         guard let appUser = user as? AppUser, let userId = appUser.id else {
-            #expect(false, "User must be AppUser with Int id")
+            #expect(Bool(false), "User must be AppUser with Int id")
             return
         }
 
@@ -92,7 +92,7 @@ struct OverlayStoreIntegrationTests {
 
         let user = try await store.users.create(identifier: .email("parse@example.com"), with: nil)
         guard let appUser = user as? AppUser, let userId = appUser.id else {
-            #expect(false, "User must be AppUser with Int id")
+            #expect(Bool(false), "User must be AppUser with Int id")
             return
         }
 

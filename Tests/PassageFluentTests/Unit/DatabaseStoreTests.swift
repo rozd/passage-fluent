@@ -271,7 +271,7 @@ struct UserStoreTests {
         let identifier = Identifier.email("test@example.com")
 
         // Create first user
-        let user1 = try await store.users.create(identifier: identifier, with: nil)
+        _ = try await store.users.create(identifier: identifier, with: nil)
 
         // Create second user with different email
         let user2 = try await store.users.create(

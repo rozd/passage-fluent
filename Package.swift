@@ -14,7 +14,6 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent.git", from: "4.13.0"),
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.9.0"),
         .package(url: "https://github.com/vapor-community/passage.git", from: "0.5.17"),
-        .package(url: "https://github.com/apple/swift-testing.git", branch: "main"),
     ],
     targets: [
         .target(
@@ -31,7 +30,6 @@ let package = Package(
                 .product(name: "Passage", package: "passage"),
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
-                .product(name: "Testing", package: "swift-testing"),
             ]
         )
     ]
