@@ -309,4 +309,312 @@ struct TokenStoreTests {
         #expect(finalToken1?.isRevoked == true)
         #expect(finalToken2?.isRevoked == true)
     }
+
+    @Test("revokeRefreshTokens(for:keepingNewestSessions:) keeps N most recent sessions")
+    func testRevokeKeepingNewestSessions() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let user = try await store.users.create(
+            identifier: .email("test@example.com"),
+            with: nil
+        )
+
+        let expiresAt = Date().addingTimeInterval(3600)
+        let baseTime = Date()
+
+        let sessionA = UUID()
+        let sessionB = UUID()
+        let sessionC = UUID()
+
+        var token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashA1",
+            expiresAt: expiresAt, sessionId: sessionA
+        )
+        guard var model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime
+        try await model.save(on: app.db)
+
+        token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashB1",
+            expiresAt: expiresAt, sessionId: sessionB
+        )
+        guard var model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime.addingTimeInterval(10)
+        try await model.save(on: app.db)
+
+        token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashC1",
+            expiresAt: expiresAt, sessionId: sessionC
+        )
+        guard var model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime.addingTimeInterval(20)
+        try await model.save(on: app.db)
+
+        let revoked = try await store.tokens.revokeRefreshTokens(for: user, keepingNewestSessions: 1)
+
+        #expect(revoked.count == 2)
+        #expect(revoked.contains(sessionB))
+        #expect(revoked.contains(sessionA))
+        #expect(!revoked.contains(sessionC))
+
+        let tokenA = try await store.tokens.find(refreshTokenHash: "hashA1")
+        let tokenB = try await store.tokens.find(refreshTokenHash: "hashB1")
+        let tokenC = try await store.tokens.find(refreshTokenHash: "hashC1")
+
+        #expect(tokenA?.isRevoked == true)
+        #expect(tokenB?.isRevoked == true)
+        #expect(tokenC?.isRevoked == false)
+    }
+
+    @Test("revokeRefreshTokens(for:keepingNewestSessions:) recency follows session newest row")
+    func testRevokeRecencyFollowsSessionNewestRow() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let user = try await store.users.create(
+            identifier: .email("test@example.com"),
+            with: nil
+        )
+
+        let expiresAt = Date().addingTimeInterval(3600)
+        let baseTime = Date()
+
+        let sessionA = UUID()
+        let sessionB = UUID()
+
+        var token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashA1",
+            expiresAt: expiresAt, sessionId: sessionA
+        )
+        guard let model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime
+        try await model.save(on: app.db)
+
+        token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashB1",
+            expiresAt: expiresAt, sessionId: sessionB
+        )
+        guard let model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime.addingTimeInterval(10)
+        try await model.save(on: app.db)
+
+        token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashA2",
+            expiresAt: expiresAt, sessionId: sessionA
+        )
+        guard let model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime.addingTimeInterval(20)
+        try await model.save(on: app.db)
+
+        let revoked = try await store.tokens.revokeRefreshTokens(for: user, keepingNewestSessions: 1)
+
+        #expect(revoked.count == 1)
+        #expect(revoked.contains(sessionB))
+        #expect(!revoked.contains(sessionA))
+
+        let tokenB1 = try await store.tokens.find(refreshTokenHash: "hashB1")
+        #expect(tokenB1?.isRevoked == true)
+    }
+
+    @Test("revokeRefreshTokens(for:keepingNewestSessions:) ignores expired sessions when ranking")
+    func testRevokeKeepingNewestSessionsIgnoresExpired() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let user = try await store.users.create(
+            identifier: .email("test@example.com"),
+            with: nil
+        )
+
+        let baseTime = Date()
+
+        let validSession = UUID()
+        let expiredSession = UUID()
+
+        // Older row, still valid.
+        var token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashValid",
+            expiresAt: baseTime.addingTimeInterval(3600), sessionId: validSession
+        )
+        guard let model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime
+        try await model.save(on: app.db)
+
+        // Newer row, but already expired (never revoked).
+        token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashExpired",
+            expiresAt: baseTime.addingTimeInterval(-60), sessionId: expiredSession
+        )
+        guard let model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime.addingTimeInterval(10)
+        try await model.save(on: app.db)
+
+        let revoked = try await store.tokens.revokeRefreshTokens(for: user, keepingNewestSessions: 1)
+
+        #expect(revoked.isEmpty)
+        #expect(!revoked.contains(validSession))
+
+        let validToken = try await store.tokens.find(refreshTokenHash: "hashValid")
+        #expect(validToken?.isRevoked == false)
+    }
+
+    @Test("revokeRefreshTokens(for:keepingNewestSessions:) count 0 revokes all")
+    func testRevokeCountZeroRevokesAll() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let user = try await store.users.create(
+            identifier: .email("test@example.com"),
+            with: nil
+        )
+
+        let expiresAt = Date().addingTimeInterval(3600)
+
+        let sessionA = UUID()
+        let sessionB = UUID()
+
+        _ = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashA1",
+            expiresAt: expiresAt, sessionId: sessionA
+        )
+
+        _ = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashB1",
+            expiresAt: expiresAt, sessionId: sessionB
+        )
+
+        let revoked = try await store.tokens.revokeRefreshTokens(for: user, keepingNewestSessions: 0)
+
+        #expect(revoked.count == 2)
+
+        let tokenA = try await store.tokens.find(refreshTokenHash: "hashA1")
+        let tokenB = try await store.tokens.find(refreshTokenHash: "hashB1")
+
+        #expect(tokenA?.isRevoked == true)
+        #expect(tokenB?.isRevoked == true)
+    }
+
+    @Test("revokeRefreshTokens(for:keepingNewestSessions:) ignores already revoked rows")
+    func testRevokeIgnoresAlreadyRevoked() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let user = try await store.users.create(
+            identifier: .email("test@example.com"),
+            with: nil
+        )
+
+        let expiresAt = Date().addingTimeInterval(3600)
+        let baseTime = Date()
+
+        let sessionA = UUID()
+        let sessionB = UUID()
+
+        var token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashA1",
+            expiresAt: expiresAt, sessionId: sessionA
+        )
+        guard let model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime
+        try await model.save(on: app.db)
+
+        token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashB1",
+            expiresAt: expiresAt, sessionId: sessionB
+        )
+        guard let model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime.addingTimeInterval(10)
+        try await model.save(on: app.db)
+
+        try await store.tokens.revokeRefreshToken(withHash: "hashA1")
+
+        let revoked = try await store.tokens.revokeRefreshTokens(for: user, keepingNewestSessions: 0)
+
+        #expect(revoked.count == 1)
+        #expect(revoked.contains(sessionB))
+    }
+
+    @Test("revokeRefreshTokens(for:keepingNewestSessions:) does not affect other users")
+    func testRevokeDoesNotAffectOtherUsers() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let user1 = try await store.users.create(
+            identifier: .email("test1@example.com"),
+            with: nil
+        )
+
+        let user2 = try await store.users.create(
+            identifier: .email("test2@example.com"),
+            with: nil
+        )
+
+        let expiresAt = Date().addingTimeInterval(3600)
+
+        let sessionA = UUID()
+        let sessionB = UUID()
+
+        _ = try await store.tokens.createRefreshToken(
+            for: user1,
+            tokenHash: "hashA1",
+            expiresAt: expiresAt, sessionId: sessionA
+        )
+
+        _ = try await store.tokens.createRefreshToken(
+            for: user2,
+            tokenHash: "hashB1",
+            expiresAt: expiresAt, sessionId: sessionB
+        )
+
+        try await store.tokens.revokeRefreshTokens(for: user1, keepingNewestSessions: 0)
+
+        let tokenUser1 = try await store.tokens.find(refreshTokenHash: "hashA1")
+        let tokenUser2 = try await store.tokens.find(refreshTokenHash: "hashB1")
+
+        #expect(tokenUser1?.isRevoked == true)
+        #expect(tokenUser2?.isRevoked == false)
+    }
 }

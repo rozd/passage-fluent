@@ -310,6 +310,13 @@ let store = DatabaseStore(app: app, db: app.db(.auth))
 let store = DatabaseStore(app: app, db: app.db)
 ```
 
+### SQL vs. non-SQL drivers
+
+`DatabaseStore` is tested against SQLite and designed for SQL drivers. Two behaviours depend on the driver being an `SQLDatabase`:
+
+- **Indexes** on the token tables are created with raw SQL and are skipped on non-SQL drivers.
+- **Refresh-token concurrency limits** (`configuration.refreshToken.concurrency = .single` / `.limit(n)`) are enforced by taking a `SELECT … FOR UPDATE` lock on the user row so that overlapping logins are serialised. PostgreSQL and MySQL honour the lock; SQLite has no row locks but permits a single writer, so it is safe there too. On non-SQL drivers (e.g. MongoDB) Fluent exposes no locking primitive, so the limit is **best-effort**: two logins that overlap can leave one more session active than configured. If you need a strict limit on such a backend, provide a custom `Passage.TokenStore` that serialises per-user issuance with a driver-native lock.
+
 ## Requirements
 
 - Swift 6.2+

@@ -1,5 +1,6 @@
 import Vapor
 import Fluent
+import SQLKit
 import Passage
 
 extension DatabaseStore {
@@ -82,6 +83,8 @@ extension DatabaseStore {
             }
 
             return try await db.transaction { db in
+                try await Self.lockSessions(of: userIdValue, on: db)
+
                 let live = try await RefreshTokenModel<UserModel>.query(on: db)
                     .filter(\.$user.$id == userIdValue)
                     .filter(\.$revokedAt == nil)
@@ -100,6 +103,105 @@ extension DatabaseStore {
 
                 return sessionIds
             }
+        }
+
+        @discardableResult
+        func revokeRefreshTokens(
+            for user: any User,
+            keepingNewestSessions count: Int
+        ) async throws -> [UUID] {
+            guard let userId = user.id else {
+                throw PassageError.unexpected(message: "User ID is missing")
+            }
+
+            guard let userIdValue = userId as? UserModel.IDValue else {
+                throw PassageError.unexpected(message: "User ID type mismatch")
+            }
+
+            if count <= 0 {
+                return try await revokeRefreshTokens(for: user)
+            }
+
+            return try await db.transaction { db in
+                try await Self.lockSessions(of: userIdValue, on: db)
+
+                // Only sessions that can still be used compete for the retained
+                // slots. An expired-but-unrevoked row must not count as a live
+                // session, or a valid session could be evicted in its place.
+                let live = try await RefreshTokenModel<UserModel>.query(on: db)
+                    .filter(\.$user.$id == userIdValue)
+                    .filter(\.$revokedAt == nil)
+                    .filter(\.$expiresAt > .now)
+                    .sort(\.$createdAt, .descending)
+                    .all()
+
+                var orderedSessions: [UUID] = []
+
+                for token in live {
+                    if !orderedSessions.contains(token.sessionId) {
+                        orderedSessions.append(token.sessionId)
+                    }
+                }
+
+                let evicted = Array(orderedSessions.dropFirst(count))
+
+                if evicted.isEmpty {
+                    return []
+                }
+
+                try await RefreshTokenModel<UserModel>.query(on: db)
+                    .filter(\.$user.$id == userIdValue)
+                    .filter(\.$revokedAt == nil)
+                    .filter(\.$sessionId ~~ evicted)
+                    .set(\.$revokedAt, to: .now)
+                    .update()
+
+                return evicted
+            }
+        }
+
+        /// Serialises concurrent session issuance for one user.
+        ///
+        /// The concurrency policies rank a user's live sessions and then revoke
+        /// the losers. Two overlapping logins that both rank the same committed
+        /// snapshot would each miss the other's not-yet-visible insert, evict the
+        /// same old sessions, and leave more sessions active than the policy
+        /// allows. Row locks on the token table cannot prevent this — the row that
+        /// escapes the ranking does not exist yet — so the transaction takes an
+        /// exclusive lock on the user row instead. A competing transaction blocks
+        /// here until the first commits, and its ranking query then runs as a
+        /// fresh statement that sees the committed insert.
+        ///
+        /// Must run inside the same transaction as the subsequent
+        /// `createRefreshToken` insert (the core issues credentials inside
+        /// `store.transaction`, and nested `transaction` calls reuse that
+        /// connection), otherwise the lock is released before the insert.
+        ///
+        /// Emits `SELECT ... FOR UPDATE` where the SQL dialect supports it
+        /// (PostgreSQL, MySQL). SQLite has no row locks but allows only one
+        /// writer per database, so the clause is omitted there.
+        ///
+        /// Non-SQL drivers (e.g. MongoDB) get no lock at all: Fluent's `Database`
+        /// protocol exposes no locking primitive, so on those backends the
+        /// concurrency policy is best-effort and two overlapping logins can
+        /// leave one session more than the limit. An in-process lock is not a
+        /// substitute — it would only hold within a single instance and give a
+        /// false guarantee behind a load balancer — and throwing is not an
+        /// option because `revokeRefreshTokens(for:)` also backs "log out
+        /// everywhere". Enforcing a strict limit on a non-SQL backend requires a
+        /// custom `Passage.TokenStore` with a driver-native lock.
+        private static func lockSessions(of userId: UserModel.IDValue, on db: any Database) async throws {
+            // No portable lock on non-SQL drivers; see the doc comment above.
+            guard let sql = db as? any SQLDatabase else { return }
+
+            let idColumn = SQLIdentifier(UserModel.passageUserIDFieldKey.description)
+
+            try await sql.select()
+                .column(idColumn)
+                .from(SQLQualifiedTable(UserModel.schema, space: UserModel.space))
+                .where(idColumn, .equal, SQLBind(userId))
+                .for(.update)
+                .run()
         }
 
         func revokeRefreshTokens(sessionId: UUID) async throws {
