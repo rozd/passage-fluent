@@ -99,7 +99,7 @@ struct CustomUserStoreIntegrationTests {
         _ = try await store.tokens.createRefreshToken(
             for: user!,
             tokenHash: "customtoken",
-            expiresAt: futureDate
+            expiresAt: futureDate, sessionId: UUID()
         )
 
         let found = try await store.tokens.find(refreshTokenHash: "customtoken")

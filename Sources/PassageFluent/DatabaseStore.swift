@@ -23,6 +23,21 @@ public struct DatabaseStore: Passage.Store {
 
     public let passkeyChallenges: (any Passage.PasskeyChallengeStore)?
 
+    private let rebind: @Sendable (any Database) -> DatabaseStore
+
+    public var database: any Database { db }
+
+    public func transaction<T: Sendable>(
+        _ body: @Sendable (any Passage.Store) async throws -> T
+    ) async throws -> T {
+        let rebind = self.rebind
+        return try await withoutActuallyEscaping(body) { body in
+            try await db.transaction { transactionDatabase in
+                try await body(rebind(transactionDatabase))
+            }
+        }
+    }
+
     // MARK: - Public Initializers
 
     /// Island mode: creates own users table and uses built-in DefaultUserModel
@@ -95,6 +110,16 @@ public struct DatabaseStore: Passage.Store {
         self.exchangeTokens = ExchangeTokenStore<UserModel>(db: db)
         self.passkeyCredentials = PasskeyCredentialStore<UserModel>(db: db)
         self.passkeyChallenges = PasskeyChallengeStore<UserModel>(db: db)
+        self.rebind = { transactionDatabase in
+            DatabaseStore(
+                app: app,
+                db: transactionDatabase,
+                userModelType: UserModel.self,
+                customUserStore: customUserStore,
+                includeIdentifiers: includeIdentifiers,
+                registerMigrations: false
+            )
+        }
 
         if registerMigrations {
             Self.registerMigrations(for: UserModel.self, on: app, includeIdentifiers: includeIdentifiers)
@@ -135,8 +160,9 @@ public struct DatabaseStore: Passage.Store {
             migrations.append(CreateIdentifierModel<UserModel>())
         }
 
-        // All modes register these 9 dependent migrations
+        // All modes register these dependent migrations
         migrations.append(CreateRefreshTokenModel<UserModel>())
+        migrations.append(AddRefreshTokenSessionId<UserModel>())
         migrations.append(CreateEmailVerificationCodeModel<UserModel>())
         migrations.append(CreatePhoneVerificationCodeModel<UserModel>())
         migrations.append(CreateEmailResetCodeModel<UserModel>())

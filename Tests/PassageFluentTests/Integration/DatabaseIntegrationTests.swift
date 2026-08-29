@@ -101,12 +101,12 @@ struct DatabaseIntegrationTests {
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash1",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash2",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         // Verify tokens exist
@@ -316,7 +316,7 @@ struct DatabaseIntegrationTests {
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "tokenhash",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         // Find token - should have user and identifiers loaded

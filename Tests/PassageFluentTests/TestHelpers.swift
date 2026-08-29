@@ -157,7 +157,7 @@ extension RefreshTokenModel {
             id: id,
             tokenHash: tokenHash,
             userID: userID,
-            expiresAt: expiresAt,
+            expiresAt: expiresAt, sessionId: UUID(),
             revokedAt: revokedAt,
             replacedBy: replacedBy
         )
