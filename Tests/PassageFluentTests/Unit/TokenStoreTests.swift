@@ -441,6 +441,56 @@ struct TokenStoreTests {
         #expect(tokenB1?.isRevoked == true)
     }
 
+    @Test("revokeRefreshTokens(for:keepingNewestSessions:) ignores expired sessions when ranking")
+    func testRevokeKeepingNewestSessionsIgnoresExpired() async throws {
+        let (app, store) = try await createTestApplicationWithStore()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let user = try await store.users.create(
+            identifier: .email("test@example.com"),
+            with: nil
+        )
+
+        let baseTime = Date()
+
+        let validSession = UUID()
+        let expiredSession = UUID()
+
+        // Older row, still valid.
+        var token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashValid",
+            expiresAt: baseTime.addingTimeInterval(3600), sessionId: validSession
+        )
+        guard let model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime
+        try await model.save(on: app.db)
+
+        // Newer row, but already expired (never revoked).
+        token = try await store.tokens.createRefreshToken(
+            for: user,
+            tokenHash: "hashExpired",
+            expiresAt: baseTime.addingTimeInterval(-60), sessionId: expiredSession
+        )
+        guard let model = token as? RefreshTokenModel else {
+            #expect(Bool(false), "Expected RefreshTokenModel")
+            return
+        }
+        model.createdAt = baseTime.addingTimeInterval(10)
+        try await model.save(on: app.db)
+
+        let revoked = try await store.tokens.revokeRefreshTokens(for: user, keepingNewestSessions: 1)
+
+        #expect(revoked.isEmpty)
+        #expect(!revoked.contains(validSession))
+
+        let validToken = try await store.tokens.find(refreshTokenHash: "hashValid")
+        #expect(validToken?.isRevoked == false)
+    }
+
     @Test("revokeRefreshTokens(for:keepingNewestSessions:) count 0 revokes all")
     func testRevokeCountZeroRevokesAll() async throws {
         let (app, store) = try await createTestApplicationWithStore()

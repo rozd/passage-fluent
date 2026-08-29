@@ -120,9 +120,13 @@ extension DatabaseStore {
             }
 
             return try await db.transaction { db in
+                // Only sessions that can still be used compete for the retained
+                // slots. An expired-but-unrevoked row must not count as a live
+                // session, or a valid session could be evicted in its place.
                 let live = try await RefreshTokenModel<UserModel>.query(on: db)
                     .filter(\.$user.$id == userIdValue)
                     .filter(\.$revokedAt == nil)
+                    .filter(\.$expiresAt > .now)
                     .sort(\.$createdAt, .descending)
                     .all()
 
