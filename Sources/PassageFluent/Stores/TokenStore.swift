@@ -178,9 +178,20 @@ extension DatabaseStore {
         /// connection), otherwise the lock is released before the insert.
         ///
         /// Emits `SELECT ... FOR UPDATE` where the SQL dialect supports it
-        /// (PostgreSQL, MySQL). SQLite has no row locks but serialises writers,
-        /// so the clause is omitted there; non-SQL databases skip the lock.
+        /// (PostgreSQL, MySQL). SQLite has no row locks but allows only one
+        /// writer per database, so the clause is omitted there.
+        ///
+        /// Non-SQL drivers (e.g. MongoDB) get no lock at all: Fluent's `Database`
+        /// protocol exposes no locking primitive, so on those backends the
+        /// concurrency policy is best-effort and two overlapping logins can
+        /// leave one session more than the limit. An in-process lock is not a
+        /// substitute — it would only hold within a single instance and give a
+        /// false guarantee behind a load balancer — and throwing is not an
+        /// option because `revokeRefreshTokens(for:)` also backs "log out
+        /// everywhere". Enforcing a strict limit on a non-SQL backend requires a
+        /// custom `Passage.TokenStore` with a driver-native lock.
         private static func lockSessions(of userId: UserModel.IDValue, on db: any Database) async throws {
+            // No portable lock on non-SQL drivers; see the doc comment above.
             guard let sql = db as? any SQLDatabase else { return }
 
             let idColumn = SQLIdentifier(UserModel.passageUserIDFieldKey.description)
