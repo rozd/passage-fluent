@@ -174,4 +174,97 @@ struct SessionIdStoreTests {
         try await app.autoMigrate()
         try await shutdownTestApplication(app)
     }
+
+    @Test("AddRefreshTokenSessionId migration creates index")
+    func testMigrationCreatesIndex() async throws {
+        let app = try await createTestApplication()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        _ = DatabaseStore(app: app, db: app.db)
+        try await app.autoMigrate()
+
+        guard let sqlDb = app.db as? any SQLDatabase else {
+            #expect(Bool(false), "Database must be SQLDatabase")
+            return
+        }
+
+        // Check that the index exists
+        let indexRows = try await sqlDb.raw(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_refresh_tokens_session_id'"
+        ).all()
+
+        #expect(indexRows.count == 1, "Index idx_refresh_tokens_session_id should exist after migration")
+
+        // Revert migrations
+        try await app.autoRevert()
+
+        // Check that the index is gone
+        let indexRowsAfterRevert = try await sqlDb.raw(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_refresh_tokens_session_id'"
+        ).all()
+
+        #expect(indexRowsAfterRevert.count == 0, "Index idx_refresh_tokens_session_id should be gone after revert")
+    }
+
+    @Test("AddRefreshTokenSessionId drops existing refresh tokens on upgrade")
+    func testMigrationDropsExistingTokensOnUpgrade() async throws {
+        let app = try await createTestApplication()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        guard let sqlDb = app.db as? any SQLDatabase else {
+            #expect(Bool(false), "Database must be SQLDatabase")
+            return
+        }
+
+        // Manually register only migrations up to and including CreateRefreshTokenModel
+        // This simulates a database with the old schema (no session_id column)
+        app.migrations.add(CreateUserModel())
+        app.migrations.add(CreateIdentifierModel<DefaultUserModel>())
+        app.migrations.add(CreateRefreshTokenModel<DefaultUserModel>())
+
+        try await app.autoMigrate()
+
+        // Insert test data: create a user and a refresh token in the old schema
+        let userId = UUID()
+        try await sqlDb.raw(
+            "INSERT INTO users (id, password_hash, created_at) VALUES (\(bind: userId.uuidString), 'hash', datetime('now'))"
+        ).run()
+
+        let tokenId = UUID()
+        let tokenHash = "old-token-hash"
+        let expiresAt = Date().addingTimeInterval(3600)
+        try await sqlDb.raw(
+            """
+            INSERT INTO refresh_tokens (id, token_hash, user_id, expires_at, created_at)
+            VALUES (\(bind: tokenId.uuidString), \(bind: tokenHash), \(bind: userId.uuidString), \(bind: expiresAt.ISO8601Format()), datetime('now'))
+            """
+        ).run()
+
+        // Verify the token was inserted
+        let countBefore = try await sqlDb.raw(
+            "SELECT COUNT(*) as count FROM refresh_tokens"
+        ).all()
+        let rowBefore = try #require(countBefore.first)
+        let countBeforeValue = try rowBefore.decode(column: "count", as: Int.self)
+        #expect(countBeforeValue == 1, "Should have inserted 1 refresh token before upgrade")
+
+        // Now register and run the AddRefreshTokenSessionId migration
+        app.migrations.add(AddRefreshTokenSessionId<DefaultUserModel>())
+        try await app.autoMigrate()
+
+        // Verify the table now has session_id column by checking table schema
+        let tableInfo = try await sqlDb.raw("PRAGMA table_info(refresh_tokens)").all()
+        let columnNames: [String] = try tableInfo.map { row in
+            try row.decode(column: "name", as: String.self)
+        }
+        #expect(columnNames.contains("session_id"), "Table should have session_id column after migration")
+
+        // Verify all old tokens were dropped (data loss on upgrade is intentional)
+        let countAfter = try await sqlDb.raw(
+            "SELECT COUNT(*) as count FROM refresh_tokens"
+        ).all()
+        let rowAfter = try #require(countAfter.first)
+        let countAfterValue = try rowAfter.decode(column: "count", as: Int.self)
+        #expect(countAfterValue == 0, "All existing refresh tokens should be dropped on upgrade to session_id schema")
+    }
 }
