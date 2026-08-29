@@ -27,7 +27,7 @@ This is a Swift package that provides a Fluent-backed implementation of the `Pas
 - Three initialization modes:
   - **Island mode** `init(app:db:)` — creates its own `users`/`identifiers` tables
   - **Overlay S1** `init<U>(app:db:userModelType:registerMigrations:)` — inject custom user model
-  - **Overlay S3** `init<U>(app:db:userModelType:userStore:registerMigrations:)` — inject model + custom store
+  - **Overlay S3** `init<U>(app:db:userModelType:userStore:registerMigrations:)` — inject model + custom store factory `(any Database) -> any Passage.UserStore`; the factory is re-invoked with the transaction connection by `transaction(_:)` so custom user writes stay inside the transaction
 - Migration registration with explicit control over island/overlay migrations
 
 **PassageUserModel Protocol** (`Sources/PassageFluent/PassageUserModel.swift`)

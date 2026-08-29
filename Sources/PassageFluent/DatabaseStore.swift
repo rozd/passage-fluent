@@ -23,6 +23,21 @@ public struct DatabaseStore: Passage.Store {
 
     public let passkeyChallenges: (any Passage.PasskeyChallengeStore)?
 
+    private let rebind: @Sendable (any Database) -> DatabaseStore
+
+    public var database: any Database { db }
+
+    public func transaction<T: Sendable>(
+        _ body: @Sendable (any Passage.Store) async throws -> T
+    ) async throws -> T {
+        let rebind = self.rebind
+        return try await withoutActuallyEscaping(body) { body in
+            try await db.transaction { transactionDatabase in
+                try await body(rebind(transactionDatabase))
+            }
+        }
+    }
+
     // MARK: - Public Initializers
 
     /// Island mode: creates own users table and uses built-in DefaultUserModel
@@ -56,12 +71,19 @@ public struct DatabaseStore: Passage.Store {
 
     /// Overlay mode S3: inject custom user model and custom user store.
     /// Neither the `users` nor `identifiers` tables/migrations are created;
-    /// `userStore` must return instances of `userModelType`.
+    /// the store returned by `userStore` must return instances of `userModelType`.
+    ///
+    /// `userStore` is a factory rather than an instance because `transaction`
+    /// rebinds every sub-store to the transaction's connection: it is called
+    /// once with `db` for the top-level store and again with the transaction
+    /// database for each `transaction { }` body. Bind the store to the database
+    /// it is handed, never to a captured `app.db`, or user writes escape the
+    /// transaction.
     public init<UserModel: PassageUserModel>(
         app: Application,
         db: any Database,
         userModelType: UserModel.Type,
-        userStore: any Passage.UserStore,
+        userStore: @escaping @Sendable (any Database) -> any Passage.UserStore,
         registerMigrations: Bool = true
     ) {
         self.init(
@@ -78,13 +100,13 @@ public struct DatabaseStore: Passage.Store {
         app: Application,
         db: any Database,
         userModelType: UserModel.Type,
-        customUserStore: (any Passage.UserStore)?,
+        customUserStore: (@Sendable (any Database) -> any Passage.UserStore)?,
         includeIdentifiers: Bool,
         registerMigrations: Bool
     ) {
         self.db = db
         if let customUserStore {
-            self.users = customUserStore
+            self.users = customUserStore(db)
         } else {
             self.users = UserStore<UserModel>(db: db)
         }
@@ -95,6 +117,16 @@ public struct DatabaseStore: Passage.Store {
         self.exchangeTokens = ExchangeTokenStore<UserModel>(db: db)
         self.passkeyCredentials = PasskeyCredentialStore<UserModel>(db: db)
         self.passkeyChallenges = PasskeyChallengeStore<UserModel>(db: db)
+        self.rebind = { transactionDatabase in
+            DatabaseStore(
+                app: app,
+                db: transactionDatabase,
+                userModelType: UserModel.self,
+                customUserStore: customUserStore,
+                includeIdentifiers: includeIdentifiers,
+                registerMigrations: false
+            )
+        }
 
         if registerMigrations {
             Self.registerMigrations(for: UserModel.self, on: app, includeIdentifiers: includeIdentifiers)
@@ -135,8 +167,9 @@ public struct DatabaseStore: Passage.Store {
             migrations.append(CreateIdentifierModel<UserModel>())
         }
 
-        // All modes register these 9 dependent migrations
+        // All modes register these dependent migrations
         migrations.append(CreateRefreshTokenModel<UserModel>())
+        migrations.append(AddRefreshTokenSessionId<UserModel>())
         migrations.append(CreateEmailVerificationCodeModel<UserModel>())
         migrations.append(CreatePhoneVerificationCodeModel<UserModel>())
         migrations.append(CreateEmailResetCodeModel<UserModel>())

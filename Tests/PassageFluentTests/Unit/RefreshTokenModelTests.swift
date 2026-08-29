@@ -35,7 +35,7 @@ struct RefreshTokenModelTests {
             id: uuid,
             tokenHash: "tokenhash123",
             userID: try user.requireID(),
-            expiresAt: expiresAt,
+            expiresAt: expiresAt, sessionId: UUID(),
             revokedAt: revokedAt,
             replacedBy: replacedBy
         )
@@ -61,7 +61,7 @@ struct RefreshTokenModelTests {
         let token = RefreshTokenModel(
             tokenHash: "tokenhash123",
             userID: try user.requireID(),
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
         try await token.save(on: app.db)
 
@@ -85,7 +85,7 @@ struct RefreshTokenModelTests {
         let token = RefreshTokenModel(
             tokenHash: "hash",
             userID: try user.requireID(),
-            expiresAt: Date().addingTimeInterval(3600)
+            expiresAt: Date().addingTimeInterval(3600), sessionId: UUID()
         )
         try await token.save(on: app.db)
 
@@ -103,7 +103,7 @@ struct RefreshTokenModelTests {
         let token = RefreshTokenModel(
             tokenHash: "hash",
             userID: try user.requireID(),
-            expiresAt: Date().addingTimeInterval(-3600)
+            expiresAt: Date().addingTimeInterval(-3600), sessionId: UUID()
         )
         try await token.save(on: app.db)
 
@@ -121,7 +121,7 @@ struct RefreshTokenModelTests {
         let token = RefreshTokenModel(
             tokenHash: "hash",
             userID: try user.requireID(),
-            expiresAt: Date().addingTimeInterval(3600),
+            expiresAt: Date().addingTimeInterval(3600), sessionId: UUID(),
             revokedAt: nil
         )
         try await token.save(on: app.db)
@@ -140,7 +140,7 @@ struct RefreshTokenModelTests {
         let token = RefreshTokenModel(
             tokenHash: "hash",
             userID: try user.requireID(),
-            expiresAt: Date().addingTimeInterval(3600),
+            expiresAt: Date().addingTimeInterval(3600), sessionId: UUID(),
             revokedAt: Date()
         )
         try await token.save(on: app.db)
@@ -159,7 +159,7 @@ struct RefreshTokenModelTests {
         let token = RefreshTokenModel(
             tokenHash: "hash",
             userID: try user.requireID(),
-            expiresAt: Date().addingTimeInterval(3600),
+            expiresAt: Date().addingTimeInterval(3600), sessionId: UUID(),
             revokedAt: nil
         )
         try await token.save(on: app.db)
@@ -178,7 +178,7 @@ struct RefreshTokenModelTests {
         let token = RefreshTokenModel(
             tokenHash: "hash",
             userID: try user.requireID(),
-            expiresAt: Date().addingTimeInterval(-3600),
+            expiresAt: Date().addingTimeInterval(-3600), sessionId: UUID(),
             revokedAt: nil
         )
         try await token.save(on: app.db)
@@ -197,7 +197,7 @@ struct RefreshTokenModelTests {
         let token = RefreshTokenModel(
             tokenHash: "hash",
             userID: try user.requireID(),
-            expiresAt: Date().addingTimeInterval(3600),
+            expiresAt: Date().addingTimeInterval(3600), sessionId: UUID(),
             revokedAt: Date()
         )
         try await token.save(on: app.db)
@@ -216,7 +216,7 @@ struct RefreshTokenModelTests {
         let token = RefreshTokenModel(
             tokenHash: "hash",
             userID: try user.requireID(),
-            expiresAt: Date().addingTimeInterval(-3600),
+            expiresAt: Date().addingTimeInterval(-3600), sessionId: UUID(),
             revokedAt: Date()
         )
         try await token.save(on: app.db)
@@ -241,7 +241,7 @@ struct RefreshTokenModelTests {
             id: oldTokenId,
             tokenHash: "oldhash",
             userID: try user.requireID(),
-            expiresAt: Date().addingTimeInterval(3600),
+            expiresAt: Date().addingTimeInterval(3600), sessionId: UUID(),
             revokedAt: Date(),
             replacedBy: newTokenId
         )

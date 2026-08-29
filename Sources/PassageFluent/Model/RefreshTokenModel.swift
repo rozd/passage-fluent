@@ -26,6 +26,9 @@ final class RefreshTokenModel<UserModel: PassageUserModel>: Model, @unchecked Se
     @OptionalField(key: "replaced_by")
     var replacedBy: UUID?
 
+    @Field(key: "session_id")
+    var sessionId: UUID
+
     init() {}
 
     init(
@@ -33,6 +36,7 @@ final class RefreshTokenModel<UserModel: PassageUserModel>: Model, @unchecked Se
         tokenHash: String,
         userID: UserModel.IDValue,
         expiresAt: Date,
+        sessionId: UUID,
         revokedAt: Date? = nil,
         replacedBy: UUID? = nil
     ) {
@@ -42,6 +46,7 @@ final class RefreshTokenModel<UserModel: PassageUserModel>: Model, @unchecked Se
         self.expiresAt = expiresAt
         self.revokedAt = revokedAt
         self.replacedBy = replacedBy
+        self.sessionId = sessionId
     }
 }
 

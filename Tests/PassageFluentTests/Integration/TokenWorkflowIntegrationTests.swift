@@ -27,7 +27,7 @@ struct TokenWorkflowIntegrationTests {
         let refreshToken = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "initialrefreshhash",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         #expect(refreshToken.isValid == true)
@@ -57,7 +57,7 @@ struct TokenWorkflowIntegrationTests {
         let token1 = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "token1hash",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         #expect(token1.isValid == true)
@@ -67,7 +67,7 @@ struct TokenWorkflowIntegrationTests {
         let token2 = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "token2hash",
-            expiresAt: expiresAt,
+            expiresAt: expiresAt, sessionId: UUID(),
             replacing: token1
         )
 
@@ -83,7 +83,7 @@ struct TokenWorkflowIntegrationTests {
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "token3hash",
-            expiresAt: expiresAt,
+            expiresAt: expiresAt, sessionId: UUID(),
             replacing: token2
         )
 
@@ -119,14 +119,14 @@ struct TokenWorkflowIntegrationTests {
         let token1 = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "originalhash",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         // 3. Token is rotated legitimately
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "newhash",
-            expiresAt: expiresAt,
+            expiresAt: expiresAt, sessionId: UUID(),
             replacing: token1
         )
 
@@ -167,17 +167,17 @@ struct TokenWorkflowIntegrationTests {
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "device1hash",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "device2hash",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "device3hash",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         // 3. Verify all tokens are valid
@@ -190,7 +190,7 @@ struct TokenWorkflowIntegrationTests {
         #expect(device3?.isValid == true)
 
         // 4. User logs out from all devices
-        try await store.tokens.revokeRefreshToken(for: user)
+        try await store.tokens.revokeRefreshTokens(for: user)
 
         // 5. All tokens should be revoked
         let finalDevice1 = try await store.tokens.find(refreshTokenHash: "device1hash")
@@ -219,12 +219,12 @@ struct TokenWorkflowIntegrationTests {
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "keepthis",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "revokethis",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         // 3. User logs out from only one device
@@ -343,7 +343,7 @@ struct TokenWorkflowIntegrationTests {
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "expiredhash",
-            expiresAt: pastDate
+            expiresAt: pastDate, sessionId: UUID()
         )
 
         // 3. Token should be found but invalid

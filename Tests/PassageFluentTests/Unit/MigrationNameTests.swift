@@ -16,6 +16,7 @@ struct MigrationNameTests {
         let expectedNames: [(migration: AsyncMigration, name: String)] = [
             (CreateIdentifierModel<DefaultUserModel>(), "PassageFluent.CreateIdentifierModel"),
             (CreateRefreshTokenModel<DefaultUserModel>(), "PassageFluent.CreateRefreshTokenModel"),
+            (AddRefreshTokenSessionId<DefaultUserModel>(), "PassageFluent.AddRefreshTokenSessionId"),
             (CreateEmailVerificationCodeModel<DefaultUserModel>(), "PassageFluent.CreateEmailVerificationCodeModel"),
             (CreatePhoneVerificationCodeModel<DefaultUserModel>(), "PassageFluent.CreatePhoneVerificationCodeModel"),
             (CreateEmailResetCodeModel<DefaultUserModel>(), "PassageFluent.CreateEmailResetCodeModel"),
@@ -31,9 +32,9 @@ struct MigrationNameTests {
         }
     }
 
-    /// Island-mode integration: verify that autoMigrate() registers exactly the 11 expected migrations.
-    @Test("Island mode registers exactly 11 migrations with correct names")
-    func testIslandModeRegisters11Migrations() async throws {
+    /// Island-mode integration: verify that autoMigrate() registers exactly the 12 expected migrations.
+    @Test("Island mode registers exactly 12 migrations with correct names")
+    func testIslandModeRegisters12Migrations() async throws {
         let app = try await createTestApplication()
         defer { Task { try? await shutdownTestApplication(app) } }
 
@@ -55,6 +56,7 @@ struct MigrationNameTests {
             "PassageFluent.CreateUserModel",
             "PassageFluent.CreateIdentifierModel",
             "PassageFluent.CreateRefreshTokenModel",
+            "PassageFluent.AddRefreshTokenSessionId",
             "PassageFluent.CreateEmailVerificationCodeModel",
             "PassageFluent.CreatePhoneVerificationCodeModel",
             "PassageFluent.CreateEmailResetCodeModel",
@@ -65,6 +67,6 @@ struct MigrationNameTests {
             "PassageFluent.CreatePasskeyChallengeModel",
         ].sorted()
 
-        #expect(migrationNames == expectedNames, "Island mode should register exactly 11 migrations with exact names")
+        #expect(migrationNames == expectedNames, "Island mode should register exactly 12 migrations with exact names")
     }
 }

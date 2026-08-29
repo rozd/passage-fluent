@@ -206,7 +206,9 @@ let store = DatabaseStore(
 
 ### Step 3b: Overlay Mode S3 — Custom User Store
 
-Provide both the model type AND a custom `Passage.UserStore` implementation that operates on your user table. PassageFluent skips creating the `identifiers` table:
+Provide both the model type AND a factory for a custom `Passage.UserStore` implementation that operates on your user table. PassageFluent skips creating the `identifiers` table.
+
+The factory receives the `Database` the store must use. `DatabaseStore.transaction` calls it again with the transaction's connection so user writes commit or roll back together with tokens, codes and credentials — bind your store to the database it is handed, never to a captured `app.db`:
 
 ```swift
 struct AppUserStore: Passage.UserStore {
@@ -232,7 +234,7 @@ let store = DatabaseStore(
     app: app,
     db: app.db,
     userModelType: AppUser.self,
-    userStore: AppUserStore(db: app.db)
+    userStore: { AppUserStore(db: $0) }
 )
 ```
 

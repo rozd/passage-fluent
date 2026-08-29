@@ -145,14 +145,14 @@ struct OverlayStoreIntegrationTests {
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "testhash",
-            expiresAt: futureDate
+            expiresAt: futureDate, sessionId: UUID()
         )
 
         let found = try await store.tokens.find(refreshTokenHash: "testhash")
         #expect(found != nil)
 
         // Revoke
-        try await store.tokens.revokeRefreshToken(for: user)
+        try await store.tokens.revokeRefreshTokens(for: user)
         let revoked = try await store.tokens.find(refreshTokenHash: "testhash")
         #expect(revoked?.revokedAt != nil)
     }

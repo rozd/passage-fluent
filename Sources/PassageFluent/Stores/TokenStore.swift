@@ -13,11 +13,13 @@ extension DatabaseStore {
             for user: any User,
             tokenHash hash: String,
             expiresAt: Date,
+            sessionId: UUID,
         ) async throws -> any RefreshToken {
-            return try await self.createRefreshToken(
+            try await self.createRefreshToken(
                 for: user,
                 tokenHash: hash,
                 expiresAt: expiresAt,
+                sessionId: sessionId,
                 replacing: nil,
             )
         }
@@ -26,6 +28,7 @@ extension DatabaseStore {
             for user: any User,
             tokenHash hash: String,
             expiresAt: Date,
+            sessionId: UUID,
             replacing tokenToReplace: (any RefreshToken)?,
         ) async throws -> any RefreshToken {
             guard let user = user as? UserModel else {
@@ -35,7 +38,8 @@ extension DatabaseStore {
                 let newRefreshToken = RefreshTokenModel<UserModel>(
                     tokenHash: hash,
                     userID: try user.requireID(),
-                    expiresAt: expiresAt
+                    expiresAt: expiresAt,
+                    sessionId: sessionId
                 )
 
                 try await newRefreshToken.save(on: db)
@@ -68,7 +72,7 @@ extension DatabaseStore {
             return try await query.first()
         }
 
-        func revokeRefreshToken(for user: any User) async throws {
+        func revokeRefreshTokens(for user: any User) async throws -> [UUID] {
             guard let userId = user.id else {
                 throw PassageError.unexpected(message: "User ID is missing")
             }
@@ -77,8 +81,30 @@ extension DatabaseStore {
                 throw PassageError.unexpected(message: "User ID type mismatch")
             }
 
+            return try await db.transaction { db in
+                let live = try await RefreshTokenModel<UserModel>.query(on: db)
+                    .filter(\.$user.$id == userIdValue)
+                    .filter(\.$revokedAt == nil)
+                    .all()
+
+                var sessionIds: [UUID] = []
+                for token in live where !sessionIds.contains(token.sessionId) {
+                    sessionIds.append(token.sessionId)
+                }
+
+                try await RefreshTokenModel<UserModel>.query(on: db)
+                    .filter(\.$user.$id == userIdValue)
+                    .filter(\.$revokedAt == nil)
+                    .set(\.$revokedAt, to: .now)
+                    .update()
+
+                return sessionIds
+            }
+        }
+
+        func revokeRefreshTokens(sessionId: UUID) async throws {
             try await RefreshTokenModel<UserModel>.query(on: db)
-                .filter(\.$user.$id == userIdValue)
+                .filter(\.$sessionId == sessionId)
                 .filter(\.$revokedAt == nil)
                 .set(\.$revokedAt, to: .now)
                 .update()

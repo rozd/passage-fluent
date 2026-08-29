@@ -26,7 +26,7 @@ struct TokenStoreTests {
         let token = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "tokenhash123",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         #expect(token.tokenHash == "tokenhash123")
@@ -52,7 +52,7 @@ struct TokenStoreTests {
         let oldToken = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "oldhash",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         #expect(oldToken.isRevoked == false)
@@ -61,7 +61,7 @@ struct TokenStoreTests {
         let newToken = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "newhash",
-            expiresAt: expiresAt,
+            expiresAt: expiresAt, sessionId: UUID(),
             replacing: oldToken
         )
 
@@ -100,7 +100,7 @@ struct TokenStoreTests {
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "tokenhash123",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         let result = try await store.tokens.find(refreshTokenHash: "tokenhash123")
@@ -112,7 +112,7 @@ struct TokenStoreTests {
 
     // MARK: - Revoke Token Tests
 
-    @Test("revokeRefreshToken(for:) revokes all user tokens")
+    @Test("revokeRefreshTokens(for:) revokes all user tokens")
     func testRevokeAllUserTokens() async throws {
         let (app, store) = try await createTestApplicationWithStore()
         defer { Task { try? await shutdownTestApplication(app) } }
@@ -129,21 +129,21 @@ struct TokenStoreTests {
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash1",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash2",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash3",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         // Revoke all tokens for user
-        try await store.tokens.revokeRefreshToken(for: user)
+        try await store.tokens.revokeRefreshTokens(for: user)
 
         // Verify all tokens are revoked
         let token1 = try await store.tokens.find(refreshTokenHash: "hash1")
@@ -170,7 +170,7 @@ struct TokenStoreTests {
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "tokenhash123",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         // Revoke by hash
@@ -209,20 +209,20 @@ struct TokenStoreTests {
         let token1 = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash1",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         let token2 = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash2",
-            expiresAt: expiresAt,
+            expiresAt: expiresAt, sessionId: UUID(),
             replacing: token1
         )
 
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash3",
-            expiresAt: expiresAt,
+            expiresAt: expiresAt, sessionId: UUID(),
             replacing: token2
         )
 
@@ -257,7 +257,7 @@ struct TokenStoreTests {
         let token = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash1",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         // Revoke starting from the only token
@@ -285,13 +285,13 @@ struct TokenStoreTests {
         let token1 = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash1",
-            expiresAt: expiresAt
+            expiresAt: expiresAt, sessionId: UUID()
         )
 
         _ = try await store.tokens.createRefreshToken(
             for: user,
             tokenHash: "hash2",
-            expiresAt: expiresAt,
+            expiresAt: expiresAt, sessionId: UUID(),
             replacing: token1
         )
 
