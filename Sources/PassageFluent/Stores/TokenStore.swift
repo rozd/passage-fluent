@@ -1,5 +1,6 @@
 import Vapor
 import Fluent
+import SQLKit
 import Passage
 
 extension DatabaseStore {
@@ -82,6 +83,8 @@ extension DatabaseStore {
             }
 
             return try await db.transaction { db in
+                try await Self.lockSessions(of: userIdValue, on: db)
+
                 let live = try await RefreshTokenModel<UserModel>.query(on: db)
                     .filter(\.$user.$id == userIdValue)
                     .filter(\.$revokedAt == nil)
@@ -120,6 +123,8 @@ extension DatabaseStore {
             }
 
             return try await db.transaction { db in
+                try await Self.lockSessions(of: userIdValue, on: db)
+
                 // Only sessions that can still be used compete for the retained
                 // slots. An expired-but-unrevoked row must not count as a live
                 // session, or a valid session could be evicted in its place.
@@ -153,6 +158,39 @@ extension DatabaseStore {
 
                 return evicted
             }
+        }
+
+        /// Serialises concurrent session issuance for one user.
+        ///
+        /// The concurrency policies rank a user's live sessions and then revoke
+        /// the losers. Two overlapping logins that both rank the same committed
+        /// snapshot would each miss the other's not-yet-visible insert, evict the
+        /// same old sessions, and leave more sessions active than the policy
+        /// allows. Row locks on the token table cannot prevent this — the row that
+        /// escapes the ranking does not exist yet — so the transaction takes an
+        /// exclusive lock on the user row instead. A competing transaction blocks
+        /// here until the first commits, and its ranking query then runs as a
+        /// fresh statement that sees the committed insert.
+        ///
+        /// Must run inside the same transaction as the subsequent
+        /// `createRefreshToken` insert (the core issues credentials inside
+        /// `store.transaction`, and nested `transaction` calls reuse that
+        /// connection), otherwise the lock is released before the insert.
+        ///
+        /// Emits `SELECT ... FOR UPDATE` where the SQL dialect supports it
+        /// (PostgreSQL, MySQL). SQLite has no row locks but serialises writers,
+        /// so the clause is omitted there; non-SQL databases skip the lock.
+        private static func lockSessions(of userId: UserModel.IDValue, on db: any Database) async throws {
+            guard let sql = db as? any SQLDatabase else { return }
+
+            let idColumn = SQLIdentifier(UserModel.passageUserIDFieldKey.description)
+
+            try await sql.select()
+                .column(idColumn)
+                .from(SQLQualifiedTable(UserModel.schema, space: UserModel.space))
+                .where(idColumn, .equal, SQLBind(userId))
+                .for(.update)
+                .run()
         }
 
         func revokeRefreshTokens(sessionId: UUID) async throws {
