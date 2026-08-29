@@ -102,6 +102,59 @@ extension DatabaseStore {
             }
         }
 
+        @discardableResult
+        func revokeRefreshTokens(
+            for user: any User,
+            keepingNewestSessions count: Int
+        ) async throws -> [UUID] {
+            guard let userId = user.id else {
+                throw PassageError.unexpected(message: "User ID is missing")
+            }
+
+            guard let userIdValue = userId as? UserModel.IDValue else {
+                throw PassageError.unexpected(message: "User ID type mismatch")
+            }
+
+            if count <= 0 {
+                return try await revokeRefreshTokens(for: user)
+            }
+
+            return try await db.transaction { db in
+                // Only sessions that can still be used compete for the retained
+                // slots. An expired-but-unrevoked row must not count as a live
+                // session, or a valid session could be evicted in its place.
+                let live = try await RefreshTokenModel<UserModel>.query(on: db)
+                    .filter(\.$user.$id == userIdValue)
+                    .filter(\.$revokedAt == nil)
+                    .filter(\.$expiresAt > .now)
+                    .sort(\.$createdAt, .descending)
+                    .all()
+
+                var orderedSessions: [UUID] = []
+
+                for token in live {
+                    if !orderedSessions.contains(token.sessionId) {
+                        orderedSessions.append(token.sessionId)
+                    }
+                }
+
+                let evicted = Array(orderedSessions.dropFirst(count))
+
+                if evicted.isEmpty {
+                    return []
+                }
+
+                try await RefreshTokenModel<UserModel>.query(on: db)
+                    .filter(\.$user.$id == userIdValue)
+                    .filter(\.$revokedAt == nil)
+                    .filter(\.$sessionId ~~ evicted)
+                    .set(\.$revokedAt, to: .now)
+                    .update()
+
+                return evicted
+            }
+        }
+
         func revokeRefreshTokens(sessionId: UUID) async throws {
             try await RefreshTokenModel<UserModel>.query(on: db)
                 .filter(\.$sessionId == sessionId)
