@@ -71,12 +71,19 @@ public struct DatabaseStore: Passage.Store {
 
     /// Overlay mode S3: inject custom user model and custom user store.
     /// Neither the `users` nor `identifiers` tables/migrations are created;
-    /// `userStore` must return instances of `userModelType`.
+    /// the store returned by `userStore` must return instances of `userModelType`.
+    ///
+    /// `userStore` is a factory rather than an instance because `transaction`
+    /// rebinds every sub-store to the transaction's connection: it is called
+    /// once with `db` for the top-level store and again with the transaction
+    /// database for each `transaction { }` body. Bind the store to the database
+    /// it is handed, never to a captured `app.db`, or user writes escape the
+    /// transaction.
     public init<UserModel: PassageUserModel>(
         app: Application,
         db: any Database,
         userModelType: UserModel.Type,
-        userStore: any Passage.UserStore,
+        userStore: @escaping @Sendable (any Database) -> any Passage.UserStore,
         registerMigrations: Bool = true
     ) {
         self.init(
@@ -93,13 +100,13 @@ public struct DatabaseStore: Passage.Store {
         app: Application,
         db: any Database,
         userModelType: UserModel.Type,
-        customUserStore: (any Passage.UserStore)?,
+        customUserStore: (@Sendable (any Database) -> any Passage.UserStore)?,
         includeIdentifiers: Bool,
         registerMigrations: Bool
     ) {
         self.db = db
         if let customUserStore {
-            self.users = customUserStore
+            self.users = customUserStore(db)
         } else {
             self.users = UserStore<UserModel>(db: db)
         }

@@ -77,7 +77,7 @@ struct CustomUserStoreIntegrationTests {
             app: app,
             db: app.db,
             userModelType: AppUser.self,
-            userStore: AppUserStore(db: app.db)
+            userStore: { AppUserStore(db: $0) }
         )
         try await app.autoMigrate()
 
@@ -115,7 +115,7 @@ struct CustomUserStoreIntegrationTests {
             app: app,
             db: app.db,
             userModelType: AppUser.self,
-            userStore: AppUserStore(db: app.db)
+            userStore: { AppUserStore(db: $0) }
         )
         try await app.autoMigrate()
 
@@ -157,7 +157,7 @@ struct CustomUserStoreIntegrationTests {
             app: app,
             db: app.db,
             userModelType: AppUser.self,
-            userStore: AppUserStore(db: app.db)
+            userStore: { AppUserStore(db: $0) }
         )
         try await app.autoMigrate()
 
@@ -181,5 +181,43 @@ struct CustomUserStoreIntegrationTests {
         #expect(!migrationNames.contains("PassageFluent.CreateUserModel"), "S3 should not register CreateUserModel")
         #expect(!migrationNames.contains("PassageFluent.CreateIdentifierModel"), "S3 should not register CreateIdentifierModel")
         #expect(migrationNames.contains("PassageFluent.CreateRefreshTokenModel"), "S3 should register dependent migrations")
+    }
+
+    @Test("Custom store user writes roll back with the DatabaseStore transaction")
+    func testCustomStoreWritesRollBackInsideTransaction() async throws {
+        let app = try await createTestApplicationForOverlay()
+        defer { Task { try? await shutdownTestApplication(app) } }
+
+        let store = DatabaseStore(
+            app: app,
+            db: app.db,
+            userModelType: AppUser.self,
+            userStore: { AppUserStore(db: $0) }
+        )
+        try await app.autoMigrate()
+
+        try await app.db.transaction { db in
+            try await AppUser(email: "tx@example.com").create(on: db)
+        }
+        let user = try #require(try await store.users.find(byIdentifier: .email("tx@example.com")))
+
+        struct Rollback: Error {}
+        await #expect(throws: Rollback.self) {
+            try await store.transaction { bound in
+                // Custom-store write (must run on the transaction connection)…
+                try await bound.users.setPassword(for: user, passwordHash: "rolled-back")
+                // …alongside a generic-store write.
+                try await bound.tokens.createRefreshToken(
+                    for: user, tokenHash: "rolled-back",
+                    expiresAt: Date().addingTimeInterval(3600), sessionId: UUID()
+                )
+                throw Rollback()
+            }
+        }
+
+        let appUserId = try #require((user as? AppUser)?.id)
+        let reloaded = try #require(try await AppUser.find(appUserId, on: app.db))
+        #expect(reloaded.passwordHash != "rolled-back", "custom user store write escaped the transaction")
+        #expect(try await store.tokens.find(refreshTokenHash: "rolled-back") == nil)
     }
 }
