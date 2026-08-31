@@ -28,13 +28,11 @@ public struct DatabaseStore: Passage.Store {
     public var database: any Database { db }
 
     public func transaction<T: Sendable>(
-        _ body: @Sendable (any Passage.Store) async throws -> T
+        _ body: @escaping @Sendable (any Passage.Store) async throws -> T
     ) async throws -> T {
         let rebind = self.rebind
-        return try await withoutActuallyEscaping(body) { body in
-            try await db.transaction { transactionDatabase in
-                try await body(rebind(transactionDatabase))
-            }
+        return try await db.transaction { transactionDatabase in
+            try await body(rebind(transactionDatabase))
         }
     }
 
