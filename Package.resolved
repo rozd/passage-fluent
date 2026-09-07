@@ -1,5 +1,5 @@
 {
-  "originHash" : "831c39ab10729a268e84fee41a190f07291bd1694b954d5fca4a148f84ac2de3",
+  "originHash" : "d4f92d3cb947e61c2c06f210eab582e128bdb37724840ab0468da8adbb0eaa45",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -105,8 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor-community/passage.git",
       "state" : {
-        "revision" : "f4edb5e0926bc249b6531502d56228ec865cd332",
-        "version" : "0.7.5"
+        "revision" : "5f7afbe063c4f2ba8595b6efd4292dbaed5c2672",
+        "version" : "0.7.6"
       }
     },
     {
@@ -249,8 +249,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-http-types.git",
       "state" : {
-        "revision" : "6c8ca8297332ea2780c45e1bce9d7fd2a8b51e1d",
-        "version" : "1.7.0"
+        "revision" : "bff4b6903cdc99dda49649dd52f46c11cfd3ed50",
+        "version" : "1.8.0"
       }
     },
     {
